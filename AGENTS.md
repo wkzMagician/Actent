@@ -2,34 +2,42 @@
 
 This project is managed by Dartloom.
 
-1. Read `dartloom.yaml` before changing infrastructure.
-2. Feature code depends on capability contracts and obtains implementations with
-   `Dartloom.get<T>(name: ...)`; do not import adapter packages in feature code.
-3. Register app-owned implementations by passing their factory map to
-   `bootstrapDartloom(customFactories: ...)`. Keep factory implementations in
-   application-owned files; do not add them to generated capability files.
+1. Read `.dartloom/project.yaml` before changing infrastructure.
+2. Dartloom packages are ordinary Dart dependencies. Feature code depends on
+   contracts; application composition in `lib/app` creates implementations.
+3. Do not add generated capability registries, runtime service locators, or
+   adapter implementations to Dartloom-owned files.
 4. Business code belongs in `lib/features`; shared app glue belongs in `lib/app`.
-5. Dartloom owns `lib/capabilities/capabilities.dart` and
-   `lib/capabilities/bootstrap.dart`. Application files, including `lib/app`
-   and ARB translations, are never overwritten by `dartloom project upgrade`.
+5. Dartloom owns only the selected project metadata and package sources. The
+   application owns `lib/app`, `lib/features`, platform glue, and translations.
+
+<!-- dartloom:begin -->
+## Dartloom packages
+
+Selected platforms: Android, iOS, Windows, macOS, Linux, Web
+
+Selected Dartloom contracts and implementations are direct dependencies in
+`pubspec.yaml`. Platform-specific implementations are selected through
+conditional application composition in `lib/app`.
+<!-- dartloom:end -->
 
 ## Capability platform support
 
-Enabled project targets: android, windows, linux.
+Enabled project targets: android, ios, windows, macos, linux, web.
 
-Generated registration is platform-aware. Treat a capability as optional when
-the current target is not listed below, and use `Dartloom.maybeGet<T>()` for
-optional feature UI instead of duplicating operating-system checks.
+Implementations are platform-aware. Treat a capability as optional when the
+current target cannot provide it, and use conditional application composition
+instead of importing native-only adapters into Web code.
 
 | Capability instance | Contract package | Implementation | Project targets |
 | --- | --- | --- | --- |
-| `settings.default` | `dartloom_settings` | `shared_preferences` | android, windows, linux |
-| `settings.sync_secrets` | `dartloom_settings` | `secure_storage` | android, windows, linux |
-| `storage.json` | `dartloom_storage` | `app_file_replica` | android, windows, linux |
-| `logging.default` | `dartloom_logging` | `logger` | android, windows, linux |
-| `autostart.default` | `dartloom_autostart` | `launch_at_startup` | windows, linux |
-| `localization.default` | `dartloom_localization` | `gen_l10n` | android, windows, linux |
-| `resident.default` | `dartloom_resident` | `tray` | windows, linux |
+| settings | `dartloom_settings` | shared preferences / secure storage | all targets |
+| storage | `dartloom_storage` | file / IndexedDB | native / Web |
+| logging | `dartloom_logging` | logger | all targets |
+| pairing | `dartloom_pairing` | relay / LAN | all targets |
+| messaging | `dartloom_messaging` | relay / LAN | all targets |
+| singleton | `dartloom_singleton` | socket adapter | desktop only |
+| resident | `dartloom_resident` | tray adapter | desktop only |
 
 
 Before finishing, run `dart format .`, `flutter analyze`, and `flutter test`.

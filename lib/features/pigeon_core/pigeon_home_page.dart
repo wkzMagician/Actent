@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../pigeon_platform/android_share_bridge.dart';
@@ -12,6 +13,7 @@ import '../work/desktop/desktop_script_runner.dart';
 import '../work/android/android_work_runner.dart';
 import '../work/work_bindings.dart';
 import '../work/work_runner.dart';
+import '../work/web_js_work.dart';
 import 'pigeon_router.dart';
 import 'pigeon_transport.dart';
 import 'pigeon_models.dart';
@@ -208,6 +210,11 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
                   config: DesktopScriptBinding.fromWork(work).toConfig(work),
                   secrets: widget.desktopSecrets,
                 ),
+              );
+            case 'web-js' when kIsWeb:
+              queue.register(
+                work.id,
+                WebJsWorkRunner(WebJsBinding.fromWork(work).toConfig()),
               );
             case 'android-intent' when widget.shareBridge != null:
               final bridge = widget.shareBridge!;
@@ -411,7 +418,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
             )
           : _selectedIndex == 1 && widget.canEditWorks
           ? FloatingActionButton.extended(
-              onPressed: _addDesktopWork,
+              onPressed: kIsWeb ? _addWebJsWork : _addDesktopWork,
               icon: const Icon(Icons.add),
               label: const Text('Add Work'),
             )
@@ -474,12 +481,19 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
                   trailing:
                       work.ownerDeviceId ==
                               (widget.deviceId ?? 'local-device') &&
-                          work.platformBindings['kind'] == 'desktop-script'
+                          (work.platformBindings['kind'] == 'desktop-script' ||
+                              (kIsWeb &&
+                                  work.platformBindings['kind'] == 'web-js'))
                       ? PopupMenuButton<String>(
                           onSelected: (value) async {
                             switch (value) {
                               case 'edit':
-                                await _editDesktopWork(work);
+                                if (kIsWeb &&
+                                    work.platformBindings['kind'] == 'web-js') {
+                                  await _editWebJsWork(work);
+                                } else {
+                                  await _editDesktopWork(work);
+                                }
                               case 'toggle':
                                 await _toggleWork(work);
                               case 'delete':
@@ -508,6 +522,99 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
         );
 
   Future<void> _addDesktopWork() => _editDesktopWork();
+
+  Future<void> _addWebJsWork() => _editWebJsWork();
+
+  Future<void> _editWebJsWork([Work? existing]) async {
+    final values = await showDialog<(String, String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController(text: existing?.name ?? '');
+        final source = TextEditingController(
+          text:
+              existing?.platformBindings['source'] as String? ??
+              'return input.content;',
+        );
+        final hosts = TextEditingController(
+          text:
+              (existing?.platformBindings['allowedHosts'] as List?)
+                  ?.whereType<String>()
+                  .join('\n') ??
+              '',
+        );
+        return AlertDialog(
+          title: Text(
+            existing == null ? 'Add JavaScript Work' : 'Edit JavaScript Work',
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                ),
+                TextField(
+                  controller: source,
+                  decoration: const InputDecoration(
+                    labelText: 'JavaScript body',
+                  ),
+                  minLines: 8,
+                  maxLines: 14,
+                ),
+                TextField(
+                  controller: hosts,
+                  decoration: const InputDecoration(
+                    labelText: 'Allowed network hosts (one per line)',
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop((name.text.trim(), source.text, hosts.text)),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty || values.$2.trim().isEmpty) return;
+    final allowedHosts = values.$3
+        .split(RegExp(r'\r?\n'))
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList();
+    final work = Work(
+      id: existing?.id ?? 'web-js-${DateTime.now().microsecondsSinceEpoch}',
+      revision: (existing?.revision ?? 0) + 1,
+      name: values.$1,
+      ownerDeviceId: widget.deviceId ?? 'local-device',
+      allowedSourceDeviceIds: existing?.allowedSourceDeviceIds ?? const {},
+      acceptedContentTypes: PigeonContentType.values.toSet(),
+      timeout: existing?.timeout ?? const Duration(minutes: 5),
+      queueLimit: existing?.queueLimit ?? 10,
+      enabled: existing?.enabled ?? true,
+      platformBindings: {
+        'kind': 'web-js',
+        'source': values.$2,
+        'allowedHosts': allowedHosts,
+      },
+      catalogVisibility: existing?.catalogVisibility ?? const {},
+    );
+    final repository = widget.repository;
+    if (repository == null) return;
+    await repository.saveWork(work);
+    await _loadRepositoryData(repository);
+  }
 
   Future<void> _editDesktopWork([Work? existing]) async {
     final values = await showDialog<(String, String, String)?>(

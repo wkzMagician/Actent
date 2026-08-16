@@ -1,5 +1,6 @@
 import 'android/android_work_runner.dart';
 import 'desktop/desktop_script_runner.dart';
+import 'web_js_work.dart';
 import '../pigeon_core/pigeon_models.dart';
 
 class WorkBindingException implements Exception {
@@ -114,6 +115,24 @@ class AndroidHttpBinding {
       ),
     );
   }
+}
+
+class WebJsBinding {
+  const WebJsBinding({required this.source, this.allowedHosts = const []});
+
+  final String source;
+  final List<String> allowedHosts;
+
+  factory WebJsBinding.fromWork(Work work) {
+    final binding = _binding(work, 'web-js');
+    return WebJsBinding(
+      source: _string(binding, 'source'),
+      allowedHosts: _stringList(binding['allowedHosts'], 'allowedHosts'),
+    );
+  }
+
+  WebJsWorkConfig toConfig() =>
+      WebJsWorkConfig(source: source, allowedHosts: allowedHosts);
 }
 
 Map<String, Object?> _binding(Work work, String kind) {
