@@ -1,0 +1,66 @@
+schema_version: 5
+
+app:
+  name: "pengion"
+  package_name: "pengion"
+  organization: "com.example"
+  description: "pengion application"
+
+platforms:
+  android: true
+  ios: false
+  windows: true
+  macos: false
+  linux: true
+  web: false
+
+capabilities:
+  settings:
+    instances:
+      default:
+        implementation: "shared_preferences"
+      sync_secrets:
+        implementation: "secure_storage"
+  storage:
+    instances:
+      json:
+        implementation: "app_file_replica"
+        factory: "createJsonReplicaStore"
+  logging:
+    instances:
+      default:
+        implementation: "logger"
+  autostart:
+    instances:
+      default:
+        implementation: "launch_at_startup"
+  localization:
+    instances:
+      default:
+        implementation: "gen_l10n"
+  resident:
+    instances:
+      default:
+        implementation: "tray"
+        options:
+          icon_path: "app_icon.ico"
+          tooltip: "Pengion"
+          right_click: "menu"
+          exit_menu_item_id: "quit"
+          menu:
+            - id: "quit"
+              label: "Quit Pengion"
+  messaging:
+    instances:
+      default:
+        implementation: "memory_messaging"
+  pairing:
+    instances:
+      default:
+        implementation: "memory_pairing"
+
+sources:
+  capabilities: github
+
+release:
+  github: true

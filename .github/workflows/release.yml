@@ -1,0 +1,15 @@
+name: Release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+jobs:
+  release:
+    uses: wkzMagician/dartloom/.github/workflows/flutter_release.yml@main
+    permissions:
+      contents: write
+    with:
+      build_android: true
+      build_windows: true
+      build_linux: true
