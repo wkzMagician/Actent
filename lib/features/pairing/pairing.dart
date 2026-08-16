@@ -6,7 +6,6 @@ export 'package:dartloom_pairing/dartloom_pairing.dart'
         FakePairingDiscovery,
         MdnsPairingAdvertiser,
         MdnsPairingDiscovery,
-        MdnsDiscoveryStatus,
         PairingAdvertisement,
         PairingCodePresenter,
         PairingCodeScanner,

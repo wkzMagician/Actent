@@ -86,7 +86,7 @@ packages:
     description:
       path: "packages/dartloom_autostart"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
@@ -95,7 +95,7 @@ packages:
     description:
       path: "packages/dartloom_autostart_launch_at_startup"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
@@ -104,7 +104,7 @@ packages:
     description:
       path: "packages/dartloom_localization"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
@@ -113,7 +113,7 @@ packages:
     description:
       path: "packages/dartloom_localization_gen_l10n"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
@@ -122,7 +122,7 @@ packages:
     description:
       path: "packages/dartloom_logging"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
@@ -131,7 +131,7 @@ packages:
     description:
       path: "packages/dartloom_logging_logger"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
@@ -139,45 +139,44 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/dartloom_messaging"
-      relative: true
-    source: path
+      ref: main
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
     version: "0.1.0"
   dartloom_pairing:
     dependency: "direct main"
     description:
       path: "packages/dartloom_pairing"
-      relative: true
-    source: path
+      ref: main
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
     version: "0.1.0"
   dartloom_resident:
     dependency: "direct main"
     description:
-      path: "../dartloom/packages/dartloom_resident"
-      relative: true
-    source: path
+      path: "packages/dartloom_resident"
+      ref: main
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
     version: "0.3.0"
   dartloom_resident_tray:
     dependency: "direct main"
     description:
-      path: "../dartloom/packages/dartloom_resident_tray"
-      relative: true
-    source: path
-    version: "0.2.1"
-  dartloom_runtime:
-    dependency: "direct main"
-    description:
-      path: "packages/dartloom_runtime"
+      path: "packages/dartloom_resident_tray"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
-    version: "0.1.0"
+    version: "0.2.1"
   dartloom_settings:
     dependency: "direct main"
     description:
       path: "packages/dartloom_settings"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
@@ -186,7 +185,7 @@ packages:
     description:
       path: "packages/dartloom_settings_secure_storage"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
@@ -195,7 +194,25 @@ packages:
     description:
       path: "packages/dartloom_settings_shared_preferences"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
+    version: "0.1.0"
+  dartloom_singleton:
+    dependency: "direct main"
+    description:
+      path: "packages/dartloom_singleton"
+      ref: main
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
+    version: "0.1.0"
+  dartloom_singleton_socket:
+    dependency: "direct main"
+    description:
+      path: "packages/dartloom_singleton_socket"
+      ref: main
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
@@ -204,28 +221,28 @@ packages:
     description:
       path: "packages/dartloom_storage"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
-    version: "0.2.0"
+    version: "0.3.1"
   dartloom_storage_file:
     dependency: "direct main"
     description:
       path: "packages/dartloom_storage_file"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
-    version: "0.1.0"
-  dartloom_storage_json_file:
+    version: "0.2.0"
+  dartloom_storage_indexeddb:
     dependency: "direct main"
     description:
-      path: "packages/dartloom_storage_json_file"
+      path: "packages/dartloom_storage_indexeddb"
       ref: main
-      resolved-ref: c9b5ac942dc4d241fcfe9b2e40e869c14abbb95c
+      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
-    version: "0.1.0"
+    version: "0.2.0"
   fake_async:
     dependency: transitive
     description:
@@ -330,10 +347,10 @@ packages:
     dependency: transitive
     description:
       name: hooks
-      sha256: "03a564c3704524ee0f7fc56fc621e8796cc2eb8c24d1f1a33b34979815b285c4"
+      sha256: "9a62a50b50b769a737bc0a8ff381f333529df3ab746b2f6b02e83760231455ba"
       url: "https://pub.dev"
     source: hosted
-    version: "2.1.0"
+    version: "2.0.2"
   http:
     dependency: "direct main"
     description:
@@ -474,10 +491,10 @@ packages:
     dependency: transitive
     description:
       name: meta
-      sha256: "307249ce4ff29d58a18e97f6345f539382eb9c9c29ecda628900f31de0443dd9"
+      sha256: c82594181e3312f3d0695fc95aaaf7758d75b8d4ae2bbecf223b9fd5109a059d
       url: "https://pub.dev"
     source: hosted
-    version: "1.19.0"
+    version: "1.18.3"
   mobile_scanner:
     dependency: "direct main"
     description:
@@ -610,10 +627,10 @@ packages:
     dependency: transitive
     description:
       name: record_use
-      sha256: "3b4ab682aff40175afca6ff090cc5aa7ce9dafe8dfbae1537a6c678e6678baee"
+      sha256: "2551bd8eecfe95d14ae75f6021ad0248be5c27f138c2ec12fcb52b500b3ba1ed"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "0.6.0"
   screen_retriever:
     dependency: transitive
     description:
@@ -791,10 +808,10 @@ packages:
     dependency: transitive
     description:
       name: vector_math
-      sha256: f36f9f3be64c6198714492bb455c11056e33e2f85d9a0b676a48301e44fdcf47
+      sha256: "1d774bbdf6b72a0b12122fc1560c9c2d2a67db5a4a4cc2bd8a5c990ab20e3188"
       url: "https://pub.dev"
     source: hosted
-    version: "2.4.2"
+    version: "2.4.0"
   vm_service:
     dependency: transitive
     description:

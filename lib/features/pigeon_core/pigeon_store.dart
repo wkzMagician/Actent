@@ -34,11 +34,11 @@ class MemoryPigeonJsonStore implements PigeonJsonStore {
 class ReplicaPigeonJsonStore implements PigeonJsonStore {
   ReplicaPigeonJsonStore(this.replica);
 
-  final ReplicaStore replica;
+  final ObjectStore replica;
 
   @override
   Future<Object?> read(String key) async {
-    final bytes = await replica.readBytes(key);
+    final bytes = await replica.read(key);
     if (bytes == null) return null;
     try {
       return jsonDecode(utf8.decode(bytes));
@@ -52,7 +52,7 @@ class ReplicaPigeonJsonStore implements PigeonJsonStore {
 
   @override
   Future<void> write(String key, Object? value) async {
-    await replica.writeBytes(
+    await replica.write(
       key,
       Uint8List.fromList(utf8.encode(jsonEncode(value))),
     );
@@ -64,7 +64,7 @@ class ReplicaPigeonJsonStore implements PigeonJsonStore {
   @override
   Future<List<String>> list({String prefix = ''}) async =>
       (await replica.scan())
-          .where((item) => item.exists && item.key.startsWith(prefix))
+          .where((item) => item.key.startsWith(prefix))
           .map((item) => item.key)
           .toList()
         ..sort();

@@ -794,14 +794,6 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
           );
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
-      if (discovery is MdnsPairingDiscovery &&
-          discovery.lastStatus ==
-              MdnsDiscoveryStatus.networkConfigurationProblem) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.lanDiscoveryUnavailable)));
-        return;
-      }
       final selected = await showDialog<PairingAdvertisement>(
         context: context,
         builder: (dialogContext) => AlertDialog(

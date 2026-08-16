@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dartloom_pairing/qr_adapters.dart';
 
-import '../capabilities/capabilities.dart';
 import '../l10n/app_localizations.dart';
 import '../features/pigeon_core/pigeon_store.dart';
 import '../features/pigeon_core/pigeon_home_page.dart';
@@ -92,8 +91,8 @@ class _DartloomAppState extends State<DartloomApp> {
   @override
   Widget build(BuildContext context) => MaterialApp(
     onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-    localizationsDelegates: dartloomLocalizationsDelegates,
-    supportedLocales: dartloomSupportedLocales,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
     locale: _locale,
     theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
     home: PigeonHomePage(
@@ -120,8 +119,10 @@ class _DartloomAppState extends State<DartloomApp> {
       queue: widget.queue,
       onLocaleChanged: _changeLocale,
       canEditWorks:
+          kIsWeb ||
           defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.linux,
+          defaultTargetPlatform == TargetPlatform.linux ||
+          defaultTargetPlatform == TargetPlatform.macOS,
       desktopSecrets: widget.desktopSecrets,
       showPairingQr: (context, invite) =>
           FlutterQrCodePresenter(context).show(invite),

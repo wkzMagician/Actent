@@ -1,13 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:dartloom_runtime/dartloom_runtime.dart';
-import 'package:dartloom_settings/dartloom_settings.dart';
+import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
+import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_preferences.dart';
 
 import 'app/app.dart';
+import 'app/attachment_directory.dart';
+import 'app/object_store_factory.dart';
+import 'app/platform_services.dart';
 import 'app/pigeon_dependencies.dart';
 import 'app/resident_configuration.dart';
-import 'capabilities/bootstrap.dart';
-import 'app/dartloom_replica_factory.dart';
 import 'features/pigeon_core/attachment_retention.dart';
 import 'features/pigeon_core/device_identity.dart';
 import 'features/pigeon_core/pigeon_models.dart';
@@ -26,16 +27,17 @@ void main() {
 }
 
 Future<DartloomApp> _createApplication() async {
-  await bootstrapDartloom(customFactories: dartloomApplicationFactories);
-  final appSettings = Dartloom.get<SettingsStore>(name: 'default');
+  final singleInstance = createSingleInstanceService();
+  await singleInstance?.ensureSingleInstance();
+  final appSettings = SharedPreferencesSettingsStore();
+  final secretSettings = const SecureSettingsStore();
+  final objectStore = await openPigeonObjectStore();
   final savedLocale = await appSettings.read('app.locale');
   final initialLocale = _localeFromCode(
     savedLocale is String ? savedLocale : null,
   );
-  final repository = createPigeonRepository();
-  final secretRepository = PigeonSecretRepository(
-    Dartloom.get<SettingsStore>(name: 'sync_secrets'),
-  );
+  final repository = createPigeonRepository(objectStore);
+  final secretRepository = PigeonSecretRepository(secretSettings);
   final identity = await DeviceIdentityRepository(secretRepository)
       .loadOrCreate();
   final relay = await PigeonRelaySettings.load(secretRepository);
@@ -78,13 +80,18 @@ Future<DartloomApp> _createApplication() async {
       },
     ),
   );
+  final resident = await createResidentService();
   await configureResidentMenu(
+    resident: resident,
     onExitRequested: () async {
       try {
         await transport.stop().timeout(const Duration(milliseconds: 600));
       } on Object {
         // Exit must remain responsive even if a network subscription is slow.
       }
+      await singleInstance?.dispose();
+      await resident?.dispose();
+      await objectStore.close();
       return true;
     },
   );

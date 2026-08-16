@@ -1,0 +1,27 @@
+platforms:
+  - android
+  - ios
+  - windows
+  - macos
+  - linux
+  - web
+
+packages:
+  - dartloom_settings
+  - dartloom_settings_shared_preferences
+  - dartloom_settings_secure_storage
+  - dartloom_storage
+  - dartloom_storage_file
+  - dartloom_storage_indexeddb
+  - dartloom_logging
+  - dartloom_logging_logger
+  - dartloom_localization
+  - dartloom_localization_gen_l10n
+  - dartloom_resident
+  - dartloom_resident_tray
+  - dartloom_autostart
+  - dartloom_autostart_launch_at_startup
+  - dartloom_singleton
+  - dartloom_singleton_socket
+  - dartloom_messaging
+  - dartloom_pairing

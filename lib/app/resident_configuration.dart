@@ -1,14 +1,13 @@
 import 'package:dartloom_resident/dartloom_resident.dart';
-import 'package:dartloom_runtime/dartloom_runtime.dart';
 import 'package:flutter/widgets.dart';
 
 import '../l10n/app_localizations.dart';
 
 /// Configures the resident service through its Dartloom capability contract.
 Future<void> configureResidentMenu({
+  required ResidentService? resident,
   ResidentExitRequest? onExitRequested,
 }) async {
-  final resident = Dartloom.maybeGet<ResidentService>();
   if (resident == null) return;
 
   final platformLocale = WidgetsBinding.instance.platformDispatcher.locale;
