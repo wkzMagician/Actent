@@ -1,4 +1,4 @@
-package com.example.pengion
+package com.example.actent
 
 import android.content.ComponentName
 import android.content.Intent
@@ -22,7 +22,7 @@ import java.util.UUID
 
 class MainActivity : FlutterActivity() {
     companion object {
-        private const val CHANNEL = "pengion/android_share"
+        private const val CHANNEL = "actent/android_share"
         private const val FILE_PROVIDER_SUFFIX = ".fileprovider"
     }
 
@@ -63,9 +63,9 @@ class MainActivity : FlutterActivity() {
                 }
                 try {
                     val file = File(handle).canonicalFile
-                    val root = File(filesDir, "pigeon/attachments").canonicalFile
+                    val root = File(filesDir, "actent/attachments").canonicalFile
                     if (!file.path.startsWith(root.path + File.separator) || !file.exists()) {
-                        result.error("invalid_handle", "Attachment is not private to Pigeon", null)
+                        result.error("invalid_handle", "Attachment is not private to Actent", null)
                         return
                     }
                     val uri = FileProvider.getUriForFile(this, packageName + FILE_PROVIDER_SUFFIX, file)
@@ -192,7 +192,7 @@ class MainActivity : FlutterActivity() {
 
     private fun copyAttachment(uri: Uri): Map<String, Any?> {
         val attachmentId = "attachment-${UUID.randomUUID()}"
-        val directory = File(filesDir, "pigeon/attachments/$attachmentId")
+        val directory = File(filesDir, "actent/attachments/$attachmentId")
         directory.mkdirs()
         val target = File(directory, "payload")
         contentResolver.openInputStream(uri).use { input ->

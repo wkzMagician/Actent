@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/work/web_js_work.dart';
-import 'package:pengion/features/work/work_bindings.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/work/web_js_work.dart';
+import 'package:actent/features/work/work_bindings.dart';
 
 void main() {
   test('parses a Web JavaScript Work binding with explicit hosts', () {

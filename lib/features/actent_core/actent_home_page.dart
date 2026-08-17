@@ -5,7 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../pigeon_platform/android_share_bridge.dart';
+import '../actent_platform/android_share_bridge.dart';
 import '../pairing/pairing.dart';
 import '../pairing/lan_pairing.dart';
 import '../pairing/pairing_relay.dart';
@@ -14,16 +14,16 @@ import '../work/android/android_work_runner.dart';
 import '../work/work_bindings.dart';
 import '../work/work_runner.dart';
 import '../work/web_js_work.dart';
-import 'pigeon_router.dart';
-import 'pigeon_transport.dart';
-import 'pigeon_models.dart';
+import 'actent_router.dart';
+import 'actent_transport.dart';
+import 'actent_models.dart';
 import 'configuration_transfer.dart';
 import 'attachment_retention.dart';
-import 'pigeon_store.dart';
+import 'actent_store.dart';
 import '../../l10n/app_localizations.dart';
 
-class PigeonHomePage extends StatefulWidget {
-  const PigeonHomePage({
+class ActentHomePage extends StatefulWidget {
+  const ActentHomePage({
     super.key,
     this.repository,
     this.shareBridge,
@@ -53,7 +53,7 @@ class PigeonHomePage extends StatefulWidget {
     this.onLocaleChanged,
   });
 
-  final PigeonRepository? repository;
+  final ActentRepository? repository;
   final AndroidShareBridge? shareBridge;
   final String? deviceId;
   final String? publicKey;
@@ -65,7 +65,7 @@ class PigeonHomePage extends StatefulWidget {
   final String? lanHost;
   final int? lanPort;
   final String? lanCertificateSha256;
-  final PigeonLanServerConfig? lanServerConfig;
+  final ActentLanServerConfig? lanServerConfig;
   final PairingDiscovery? pairingDiscovery;
   final PairingRelayHandshake? pairingHandshake;
   final AttachmentRetentionManager? attachmentRetention;
@@ -76,7 +76,7 @@ class PigeonHomePage extends StatefulWidget {
   final Future<void> Function(Duration value)? onPacketDedupRetentionChanged;
   final bool canEditWorks;
   final DesktopSecretResolver? desktopSecrets;
-  final PigeonRouter? router;
+  final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Future<void> Function(BuildContext context, String invite)?
   showPairingQr;
@@ -84,17 +84,17 @@ class PigeonHomePage extends StatefulWidget {
   final Future<void> Function(Locale locale)? onLocaleChanged;
 
   @override
-  State<PigeonHomePage> createState() => _PigeonHomePageState();
+  State<ActentHomePage> createState() => _ActentHomePageState();
 }
 
-class _PigeonHomePageState extends State<PigeonHomePage> {
+class _ActentHomePageState extends State<ActentHomePage> {
   var _selectedIndex = 0;
-  final List<PigeonMessage> _messages = [];
+  final List<ActentMessage> _messages = [];
   final List<Work> _works = [];
   final List<Device> _devices = [];
   final Map<String, WorkReceiptStatus> _messageStatuses = {};
   final PairingCoordinator _pairing = PairingCoordinator();
-  StreamSubscription<PigeonMessage>? _shareSubscription;
+  StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
@@ -102,25 +102,25 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
   AttachmentRetention _retention = AttachmentRetention.sevenDays;
   late Duration _packetDedupRetention;
 
-  List<_PigeonPageData> _pages(BuildContext context) {
+  List<_ActentPageData> _pages(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return [
-      _PigeonPageData(
+      _ActentPageData(
         title: l10n.inbox,
         icon: Icons.inbox_outlined,
         message: l10n.inboxDescription,
       ),
-      _PigeonPageData(
+      _ActentPageData(
         title: l10n.works,
         icon: Icons.work_outline,
         message: l10n.worksDescription,
       ),
-      _PigeonPageData(
+      _ActentPageData(
         title: l10n.devices,
         icon: Icons.devices_outlined,
         message: l10n.devicesDescription,
       ),
-      _PigeonPageData(
+      _ActentPageData(
         title: l10n.settings,
         icon: Icons.settings_outlined,
         message: l10n.settingsDescription,
@@ -146,7 +146,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     }
   }
 
-  Future<void> _loadRepositoryData(PigeonRepository repository) async {
+  Future<void> _loadRepositoryData(ActentRepository repository) async {
     final messages = await repository.listMessages();
     var works = await repository.listWorks();
     if (widget.shareBridge != null &&
@@ -156,7 +156,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
         revision: 1,
         name: 'Android Share',
         ownerDeviceId: widget.deviceId ?? 'local-device',
-        acceptedContentTypes: PigeonContentType.values.toSet(),
+        acceptedContentTypes: ActentContentType.values.toSet(),
         platformBindings: const {
           'kind': 'android-intent',
           'action': 'android.intent.action.SEND',
@@ -258,7 +258,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     super.dispose();
   }
 
-  Future<void> _onSharedMessage(PigeonMessage message) async {
+  Future<void> _onSharedMessage(ActentMessage message) async {
     final repository = widget.repository;
     if (repository != null) {
       await repository.saveMessage(message);
@@ -268,7 +268,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     _showWorkPicker(message);
   }
 
-  Future<void> _showWorkPicker(PigeonMessage message) async {
+  Future<void> _showWorkPicker(ActentMessage message) async {
     final work = await showModalBottomSheet<Work>(
       context: context,
       builder: (context) => SafeArea(
@@ -435,7 +435,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     );
   }
 
-  Widget _emptyPage(_PigeonPageData page) => Center(
+  Widget _emptyPage(_ActentPageData page) => Center(
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 560),
       child: Padding(
@@ -599,7 +599,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       name: values.$1,
       ownerDeviceId: widget.deviceId ?? 'local-device',
       allowedSourceDeviceIds: existing?.allowedSourceDeviceIds ?? const {},
-      acceptedContentTypes: PigeonContentType.values.toSet(),
+      acceptedContentTypes: ActentContentType.values.toSet(),
       timeout: existing?.timeout ?? const Duration(minutes: 5),
       queueLimit: existing?.queueLimit ?? 10,
       enabled: existing?.enabled ?? true,
@@ -683,7 +683,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       name: values.$1,
       ownerDeviceId: widget.deviceId ?? 'local-device',
       allowedSourceDeviceIds: existing?.allowedSourceDeviceIds ?? const {},
-      acceptedContentTypes: PigeonContentType.values.toSet(),
+      acceptedContentTypes: ActentContentType.values.toSet(),
       timeout: existing?.timeout ?? const Duration(hours: 24),
       queueLimit: existing?.queueLimit ?? 10,
       enabled: existing?.enabled ?? true,
@@ -904,7 +904,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       final selected = await showDialog<PairingAdvertisement>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Nearby Pigeon devices'),
+          title: const Text('Nearby Actent devices'),
           content: advertisements.isEmpty
               ? Text(l10n.lanNoDevices)
               : SizedBox(
@@ -976,7 +976,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       port: port,
       deviceId: widget.deviceId ?? 'local-device',
       publicKey: widget.publicKey ?? 'local-public-key',
-      displayName: 'Pigeon ${widget.deviceId ?? 'device'}',
+      displayName: 'Actent ${widget.deviceId ?? 'device'}',
       platform: 'paired',
       relayUrl: widget.pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
       relayTopic: widget.relayTopic ?? '',
@@ -1066,7 +1066,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       issuerDeviceId: widget.deviceId ?? 'local-device',
       issuerPublicKey: widget.publicKey ?? 'local-public-key',
       relayUrl: pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
-      temporaryTopic: 'pigeon-pair-${DateTime.now().microsecondsSinceEpoch}',
+      temporaryTopic: 'actent-pair-${DateTime.now().microsecondsSinceEpoch}',
       issuerRelayTopic: widget.relayTopic ?? '',
       issuerLanHost: widget.lanHost,
       issuerLanPort: widget.lanPort,
@@ -1077,7 +1077,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     if (lanServer != null) {
       final advertiser = MdnsPairingAdvertiser(
         deviceId: widget.deviceId ?? 'local-device',
-        displayName: 'Pigeon ${widget.deviceId ?? 'device'}',
+        displayName: 'Actent ${widget.deviceId ?? 'device'}',
         platform: 'paired',
         fingerprint: _publicKeyFingerprint(
           widget.publicKey ?? 'local-public-key',
@@ -1226,7 +1226,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
         invite: invite,
         deviceId: widget.deviceId ?? 'local-device',
         publicKey: widget.publicKey ?? 'local-public-key',
-        displayName: 'Pigeon ${widget.deviceId ?? 'device'}',
+        displayName: 'Actent ${widget.deviceId ?? 'device'}',
         platform: 'paired',
         relayUrl: pairingHandshake.server.toString(),
         relayTopic: widget.relayTopic ?? '',
@@ -1512,7 +1512,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     );
   }
 
-  Future<void> _deleteMessage(PigeonMessage message) async {
+  Future<void> _deleteMessage(ActentMessage message) async {
     final repository = widget.repository;
     if (repository == null) return;
     final manager = widget.attachmentRetention;
@@ -1525,7 +1525,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     setState(() => _messages.removeWhere((item) => item.id == message.id));
   }
 
-  Future<void> _cancelMessageRequests(PigeonMessage message) async {
+  Future<void> _cancelMessageRequests(ActentMessage message) async {
     final repository = widget.repository;
     final router = widget.router;
     if (repository == null || router == null) return;
@@ -1598,7 +1598,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Relay settings saved; restart Pigeon to reconnect.'),
+          content: Text('Relay settings saved; restart Actent to reconnect.'),
         ),
       );
     } on Object catch (error) {
@@ -1666,7 +1666,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     final repository = widget.repository;
     if (repository == null) return;
     final json = const JsonEncoder.withIndent('  ')
-        .convert(await PigeonConfigurationTransfer(repository).export());
+        .convert(await ActentConfigurationTransfer(repository).export());
     if (!mounted) return;
     await showDialog<void>(
       context: context,
@@ -1719,7 +1719,7 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
     controller.dispose();
     if (json == null) return;
     try {
-      await PigeonConfigurationTransfer(repository).import(jsonDecode(json));
+      await ActentConfigurationTransfer(repository).import(jsonDecode(json));
       await _loadRepositoryData(repository);
     } on Object catch (error) {
       if (!mounted) return;
@@ -1729,8 +1729,8 @@ class _PigeonHomePageState extends State<PigeonHomePage> {
   }
 }
 
-class _PigeonPageData {
-  const _PigeonPageData({
+class _ActentPageData {
+  const _ActentPageData({
     required this.title,
     required this.icon,
     required this.message,

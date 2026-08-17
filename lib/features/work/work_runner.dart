@@ -1,12 +1,12 @@
-import '../pigeon_core/pigeon_models.dart';
-import '../pigeon_core/pigeon_store.dart';
+import '../actent_core/actent_models.dart';
+import '../actent_core/actent_store.dart';
 
 abstract interface class WorkRunner {
   String get id;
 
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   });
@@ -46,7 +46,7 @@ class NullWorkRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async =>
@@ -65,7 +65,7 @@ class FakeWorkRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async {
@@ -111,7 +111,7 @@ class WorkQueueCoordinator {
     this.onReceipt,
   }) : assert(maxParallel > 0);
 
-  final PigeonRepository repository;
+  final ActentRepository repository;
   final int maxParallel;
   final WorkReceiptHandler? onReceipt;
   final Map<String, WorkRunner> _runners = {};

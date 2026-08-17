@@ -10,19 +10,19 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Pengion';
+  String get appTitle => 'Actent';
 
   @override
-  String get startupLoading => 'Starting Pengion…';
+  String get startupLoading => 'Starting Actent…';
 
   @override
   String get startupPreparing => 'Preparing local data and device identity';
 
   @override
-  String get startupFailed => 'Pengion failed to start';
+  String get startupFailed => 'Actent failed to start';
 
   @override
-  String get trayQuit => 'Quit Pengion';
+  String get trayQuit => 'Quit Actent';
 
   @override
   String get inbox => 'Inbox';
@@ -108,7 +108,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get language => 'Language';
 
   @override
-  String get languageDescription => 'Choose the language used by Pengion.';
+  String get languageDescription => 'Choose the language used by Actent.';
 
   @override
   String get languageEnglish => 'English';
@@ -136,10 +136,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get relaySettingsSaved =>
-      'Relay settings saved; restart Pengion to reconnect.';
+      'Relay settings saved; restart Actent to reconnect.';
 
   @override
-  String get restartToReconnect => 'Restart Pengion to reconnect.';
+  String get restartToReconnect => 'Restart Actent to reconnect.';
 
   @override
   String saveFailed(Object error) {

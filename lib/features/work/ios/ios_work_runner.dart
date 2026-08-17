@@ -1,4 +1,4 @@
-import '../../pigeon_core/pigeon_models.dart';
+import '../../actent_core/actent_models.dart';
 import '../work_runner.dart';
 
 /// iOS is intentionally not registered in the first release. This shared
@@ -14,7 +14,7 @@ class IOSRunnerPlaceholder implements IOSWorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async => const WorkRunResult.failure(errorCode: 'ios_not_registered');

@@ -2,21 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/messaging/message_connection.dart';
-import 'package:pengion/features/messaging/messaging_packet.dart';
-import 'package:pengion/features/messaging/packet_crypto.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/pigeon_core/pigeon_router.dart';
-import 'package:pengion/features/pigeon_core/pigeon_store.dart';
-import 'package:pengion/features/work/desktop/desktop_script_runner.dart';
-import 'package:pengion/features/work/work_runner.dart';
+import 'package:actent/features/messaging/message_connection.dart';
+import 'package:actent/features/messaging/messaging_packet.dart';
+import 'package:actent/features/messaging/packet_crypto.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/actent_core/actent_router.dart';
+import 'package:actent/features/actent_core/actent_store.dart';
+import 'package:actent/features/work/desktop/desktop_script_runner.dart';
+import 'package:actent/features/work/work_runner.dart';
 
 void main() {
   test(
     'routes a shared message through encrypted remote Script Work',
     () async {
-      final phoneRepository = PigeonRepository(MemoryPigeonJsonStore());
-      final desktopRepository = PigeonRepository(MemoryPigeonJsonStore());
+      final phoneRepository = ActentRepository(MemoryActentJsonStore());
+      final desktopRepository = ActentRepository(MemoryActentJsonStore());
       final phoneIdentity = await PacketIdentity.generate();
       final desktopIdentity = await PacketIdentity.generate();
       final phoneToDesktopTransport = _DeliveringTransport();
@@ -60,13 +60,13 @@ void main() {
             launcher: _E2eScriptLauncher(),
           ),
         );
-      final phoneRouter = PigeonRouter(
+      final phoneRouter = ActentRouter(
         deviceId: 'phone',
         repository: phoneRepository,
         connection: phoneConnection,
         queue: phoneQueue,
       );
-      final desktopRouter = PigeonRouter(
+      final desktopRouter = ActentRouter(
         deviceId: 'desktop',
         repository: desktopRepository,
         connection: desktopConnection,
@@ -84,7 +84,7 @@ void main() {
         revision: 1,
         name: 'Remote Script',
         ownerDeviceId: 'desktop',
-        acceptedContentTypes: PigeonContentType.values.toSet(),
+        acceptedContentTypes: ActentContentType.values.toSet(),
         platformBindings: const {
           'kind': 'desktop-script',
           'executable': 'fake-worker',
@@ -93,13 +93,13 @@ void main() {
         },
       );
       await desktopRepository.saveWork(work);
-      final message = PigeonMessage(
+      final message = ActentMessage(
         id: 'shared-1',
         traceId: 'trace-1',
         createdAt: DateTime.now().toUtc(),
-        source: const PigeonSource(kind: 'share', deviceId: 'phone'),
-        content: PigeonContent(
-          type: PigeonContentType.text,
+        source: const ActentSource(kind: 'share', deviceId: 'phone'),
+        content: ActentContent(
+          type: ActentContentType.text,
           data: const {'text': 'hello desktop'},
         ),
       );

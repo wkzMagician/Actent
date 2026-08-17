@@ -31,7 +31,7 @@ class DeviceIdentityRepository {
          privateKeyKey: privateKeyKey,
        );
 
-  final PigeonSecretRepository secrets;
+  final ActentSecretRepository secrets;
   final String deviceIdKey;
   final String privateKeyKey;
   final PairingIdentityRepository _pairingRepository;

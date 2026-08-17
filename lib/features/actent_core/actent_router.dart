@@ -6,8 +6,8 @@ import '../messaging/message_connection.dart';
 import '../messaging/messaging_packet.dart';
 import '../messaging/packet_crypto.dart';
 import '../messaging/seen_packet_store.dart';
-import 'pigeon_models.dart';
-import 'pigeon_store.dart';
+import 'actent_models.dart';
+import 'actent_store.dart';
 import 'work_catalog.dart';
 import '../work/work_runner.dart';
 
@@ -18,17 +18,17 @@ abstract interface class MessageConnection {
   });
 }
 
-class DuplicatePigeonPacketException implements Exception {
-  const DuplicatePigeonPacketException(this.packetId);
+class DuplicateActentPacketException implements Exception {
+  const DuplicateActentPacketException(this.packetId);
 
   final String packetId;
 
   @override
-  String toString() => 'Pigeon packet already processed: $packetId';
+  String toString() => 'Actent packet already processed: $packetId';
 }
 
-/// Encrypts Pigeon protocol payloads before handing them to the generic
-/// messaging capability. The capability never sees Work or Pigeon payload
+/// Encrypts Actent protocol payloads before handing them to the generic
+/// messaging capability. The capability never sees Work or Actent payload
 /// types; it only transports [MessagingPacket].
 class EncryptedMessageConnection implements MessageConnection {
   EncryptedMessageConnection({
@@ -83,7 +83,7 @@ class EncryptedMessageConnection implements MessageConnection {
     }
     PacketValidator(recipientId: recipientId).validate(packet);
     if (_seenPackets.contains(packet.packetId)) {
-      throw DuplicatePigeonPacketException(packet.packetId);
+      throw DuplicateActentPacketException(packet.packetId);
     }
     final plaintext = await _crypto.decrypt(
       recipient: localIdentity,
@@ -92,11 +92,11 @@ class EncryptedMessageConnection implements MessageConnection {
     );
     final decoded = jsonDecode(utf8.decode(plaintext));
     if (decoded is! Map) {
-      throw const PacketValidationException('Pigeon payload must be an object');
+      throw const PacketValidationException('Actent payload must be an object');
     }
-    if (decoded['schemaVersion'] != pigeonSchemaVersion) {
+    if (decoded['schemaVersion'] != actentSchemaVersion) {
       throw const PacketValidationException(
-        'unsupported Pigeon payload version',
+        'unsupported Actent payload version',
       );
     }
     _seenPackets.remember(packet.packetId);
@@ -123,8 +123,8 @@ class FakeMessageConnection implements MessageConnection {
   }
 }
 
-class PigeonRouter {
-  PigeonRouter({
+class ActentRouter {
+  ActentRouter({
     required this.deviceId,
     required this.repository,
     required this.connection,
@@ -135,7 +135,7 @@ class PigeonRouter {
   }
 
   final String deviceId;
-  final PigeonRepository repository;
+  final ActentRepository repository;
   final MessageConnection connection;
   final WorkQueueCoordinator queue;
   final WorkCatalog? catalog;
@@ -149,14 +149,14 @@ class PigeonRouter {
       recipientId: request.sourceDeviceId,
       payload: <String, Object?>{
         'type': 'workReceipt',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
         'receipt': receipt.toJson(),
       },
     );
   }
 
   Future<WorkRequest> route(
-    PigeonMessage message,
+    ActentMessage message,
     Work work, {
     String? targetDeviceId,
   }) async {
@@ -182,7 +182,7 @@ class PigeonRouter {
       recipientId: target,
       payload: <String, Object?>{
         'type': 'workRequest',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
         'request': request.toJson(),
       },
     );
@@ -205,7 +205,7 @@ class PigeonRouter {
         if (request == null ||
             request.sourceDeviceId != deviceId ||
             request.targetDeviceId != authenticatedSenderId) {
-          throw const PigeonValidationException(
+          throw const ActentValidationException(
             'receipt',
             'receipt is not authorized for the authenticated sender',
           );
@@ -215,20 +215,20 @@ class PigeonRouter {
       return receipt;
     }
     if (payload['type'] != 'workRequest') {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'type',
-        'unsupported Pigeon payload type',
+        'unsupported Actent payload type',
       );
     }
     final request = WorkRequest.fromJson(payload['request']);
     if (senderId != null && request.sourceDeviceId != senderId) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'request.sourceDeviceId',
         'does not match authenticated packet sender',
       );
     }
     if (request.targetDeviceId != deviceId) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'request.targetDeviceId',
         'packet recipient mismatch',
       );
@@ -293,7 +293,7 @@ class PigeonRouter {
         recipientId: request.targetDeviceId,
         payload: <String, Object?>{
           'type': 'workCancel',
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'requestId': request.requestId,
           'sourceDeviceId': deviceId,
         },
@@ -310,20 +310,20 @@ class PigeonRouter {
     final requestId = payload['requestId'];
     final sourceDeviceId = payload['sourceDeviceId'];
     if (requestId is! String || requestId.isEmpty) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'requestId',
         'must be a non-empty string',
       );
     }
     if (sourceDeviceId is! String || sourceDeviceId.isEmpty) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'sourceDeviceId',
         'must be a non-empty string',
       );
     }
     if (authenticatedSenderId != null &&
         authenticatedSenderId != sourceDeviceId) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'sourceDeviceId',
         'does not match authenticated packet sender',
       );
@@ -332,7 +332,7 @@ class PigeonRouter {
     if (request == null ||
         request.targetDeviceId != deviceId ||
         request.sourceDeviceId != sourceDeviceId) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'requestId',
         'cancel request is not authorized',
       );
@@ -373,7 +373,7 @@ class PigeonRouter {
         recipientId: recipientId,
         payload: <String, Object?>{
           'type': 'workReceipt',
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'receipt': receipt.toJson(),
         },
       );
@@ -447,7 +447,7 @@ class PigeonRouter {
   }
 
   /// Sends the current non-local Work catalog to a newly paired device. The
-  /// transport sees only a generic encrypted payload; Work remains a Pigeon
+  /// transport sees only a generic encrypted payload; Work remains a Actent
   /// concern inside this router.
   Future<void> sendCatalogSnapshot(String recipientId) async {
     final works = await _ownedWorks();
@@ -457,7 +457,7 @@ class PigeonRouter {
       recipientId: recipientId,
       payload: <String, Object?>{
         'type': 'catalogSnapshot',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
         'catalog': <String, Object?>{
           'revision': revision,
           'works': works.map((work) => work.toJson()).toList(),
@@ -497,7 +497,7 @@ class PigeonRouter {
       recipientId: recipientId,
       payload: <String, Object?>{
         'type': 'catalogDelta',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
         'catalog': <String, Object?>{
           'baseRevision': previous.revision,
           'nextRevision': nextRevision,
@@ -523,7 +523,7 @@ class PigeonRouter {
   }
 
   WorkRequest _request(
-    PigeonMessage message,
+    ActentMessage message,
     Work work, {
     required String sourceDeviceId,
     String? targetDeviceId,

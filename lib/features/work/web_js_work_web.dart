@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 
-import '../pigeon_core/pigeon_models.dart';
+import '../actent_core/actent_models.dart';
 import 'work_runner.dart';
 
 @JS('eval')
@@ -26,7 +26,7 @@ class WebJsWorkRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async {
@@ -57,7 +57,7 @@ class WebJsWorkRunner implements WorkRunner {
   globalThis.WebSocket = undefined;
   try {
     const api = Object.freeze({ input });
-    const fn = new Function('input', 'pengion', $source);
+    const fn = new Function('input', 'actent', $source);
     const value = await fn(input, api);
     return JSON.stringify(value === undefined ? null : value);
   } finally {

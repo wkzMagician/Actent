@@ -7,8 +7,8 @@ import '../pairing/pairing_identity.dart';
 
 /// Secret values are deliberately kept behind the secure-settings capability;
 /// this repository never writes them to the JSON business store.
-class PigeonSecretRepository implements PairingIdentityStore {
-  PigeonSecretRepository(this.settings, {this.prefix = 'pigeon.secret.'});
+class ActentSecretRepository implements PairingIdentityStore {
+  ActentSecretRepository(this.settings, {this.prefix = 'actent.secret.'});
 
   final SettingsStore settings;
   final String prefix;

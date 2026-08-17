@@ -12,15 +12,15 @@ import '../messaging/attachment_chunks.dart';
 import '../messaging/messaging_packet.dart';
 import '../messaging/packet_crypto.dart';
 import '../messaging/seen_packet_store.dart';
-import 'pigeon_models.dart';
-import 'pigeon_router.dart';
-import 'pigeon_store.dart';
+import 'actent_models.dart';
+import 'actent_router.dart';
+import 'actent_store.dart';
 import 'secret_repository.dart';
 
 /// Settings shared by the relay publisher and the local subscription.
 /// Authentication is intentionally kept outside the JSON repository.
-class PigeonRelaySettings {
-  const PigeonRelaySettings({
+class ActentRelaySettings {
+  const ActentRelaySettings({
     required this.server,
     required this.topic,
     this.authorization,
@@ -30,8 +30,8 @@ class PigeonRelaySettings {
   final String topic;
   final String? authorization;
 
-  static Future<PigeonRelaySettings> load(
-    PigeonSecretRepository secrets,
+  static Future<ActentRelaySettings> load(
+    ActentSecretRepository secrets,
   ) async {
     var topic = await secrets.read('relay.inbox.topic');
     if (topic == null || topic.length < 24) {
@@ -43,7 +43,7 @@ class PigeonRelaySettings {
     if (server == null || !server.hasScheme || server.host.isEmpty) {
       throw StateError('invalid relay.server setting');
     }
-    return PigeonRelaySettings(
+    return ActentRelaySettings(
       server: server,
       topic: topic,
       authorization: await secrets.read('relay.authorization'),
@@ -51,13 +51,13 @@ class PigeonRelaySettings {
   }
 }
 
-/// Application-owned connection that turns a Pigeon payload into an encrypted
+/// Application-owned connection that turns a Actent payload into an encrypted
 /// generic Packet and chooses LAN before relay for a paired device.
 ///
 /// The router remains unaware of HTTP, WebSocket, TLS, or device endpoint
 /// formats; those details are kept here at the composition boundary.
-class PigeonTransportService implements MessageConnection {
-  PigeonTransportService({
+class ActentTransportService implements MessageConnection {
+  ActentTransportService({
     required this.deviceId,
     required this.identity,
     required this.repository,
@@ -75,19 +75,19 @@ class PigeonTransportService implements MessageConnection {
 
   final String deviceId;
   final PacketIdentity identity;
-  final PigeonRepository repository;
-  final PigeonRelaySettings relay;
+  final ActentRepository repository;
+  final ActentRelaySettings relay;
   final Directory? attachmentRoot;
   final int maxMessageBytes;
   final Duration seenPacketRetention;
-  final PigeonLanServerConfig? lanServerConfig;
+  final ActentLanServerConfig? lanServerConfig;
   final PacketConnection Function(Device device)? lanConnectionFor;
   final RelayPublisher Function(Uri server)? relayPublisherFor;
   final NtfyPacketSubscription Function(Uri server, String topic, String? auth)?
   subscriptionFor;
   final SeenPacketStore _seenPackets;
 
-  PigeonRouter? _router;
+  ActentRouter? _router;
   StreamSubscription<MessagingPacket>? _subscription;
   LanTlsPacketServer? _lanServer;
   bool _started = false;
@@ -96,7 +96,7 @@ class PigeonTransportService implements MessageConnection {
   int? get lanPort => _lanServer?.boundPort;
   String? get lanCertificateSha256 => lanServerConfig?.certificateSha256;
 
-  Future<void> start(PigeonRouter router) async {
+  Future<void> start(ActentRouter router) async {
     if (_started) return;
     _router = router;
     final lanConfig = lanServerConfig;
@@ -227,7 +227,7 @@ class PigeonTransportService implements MessageConnection {
   }
 
   /// Entry point used by a platform-owned LAN listener. Keeping this method
-  /// on the transport means the listener never needs to understand Pigeon
+  /// on the transport means the listener never needs to understand Actent
   /// payloads or its authorization rules.
   Future<void> receivePacket(MessagingPacket packet) => _receive(packet);
 
@@ -261,7 +261,7 @@ class PigeonTransportService implements MessageConnection {
       }
       if (!_isOwnedAttachment(handle)) {
         throw const FormatException(
-          'attachment handle is outside Pigeon storage',
+          'attachment handle is outside Actent storage',
         );
       }
       final bytes = await File(handle).readAsBytes();
@@ -301,7 +301,7 @@ class PigeonTransportService implements MessageConnection {
         'chunks': chunks.map((chunk) => chunk.toJson()).toList(),
         'key': base64UrlEncode(transferKeyBytes),
       });
-      attachment['handle'] = 'pigeon-transfer://$messageId/$attachmentId';
+      attachment['handle'] = 'actent-transfer://$messageId/$attachmentId';
       rewritten.add(attachment);
     }
     message['attachments'] = rewritten;
@@ -432,9 +432,9 @@ class PigeonTransportService implements MessageConnection {
 
 /// TLS configuration for the optional local LAN packet listener. The
 /// certificate and private key are supplied by the application environment;
-/// Pigeon never generates or persists private key material in its JSON store.
-class PigeonLanServerConfig {
-  const PigeonLanServerConfig({
+/// Actent never generates or persists private key material in its JSON store.
+class ActentLanServerConfig {
+  const ActentLanServerConfig({
     required this.securityContext,
     required this.host,
     this.bindAddress,
@@ -450,30 +450,30 @@ class PigeonLanServerConfig {
 
   /// Loads a certificate/key pair provided through compile-time defines.
   /// Without both files the app remains relay-only, which is the safe default.
-  static Future<PigeonLanServerConfig?> fromEnvironment() async {
+  static Future<ActentLanServerConfig?> fromEnvironment() async {
     final certificatePath = const String.fromEnvironment(
-      'PIGEON_LAN_CERT_PATH',
+      'ACTENT_LAN_CERT_PATH',
     );
-    final privateKeyPath = const String.fromEnvironment('PIGEON_LAN_KEY_PATH');
+    final privateKeyPath = const String.fromEnvironment('ACTENT_LAN_KEY_PATH');
     if (certificatePath.isEmpty || privateKeyPath.isEmpty) return null;
     final certificateFile = File(certificatePath);
     final privateKeyFile = File(privateKeyPath);
     if (!await certificateFile.exists() || !await privateKeyFile.exists()) {
       throw StateError(
-        'PIGEON_LAN_CERT_PATH and PIGEON_LAN_KEY_PATH must point to files',
+        'ACTENT_LAN_CERT_PATH and ACTENT_LAN_KEY_PATH must point to files',
       );
     }
     final securityContext = SecurityContext()
       ..useCertificateChain(certificatePath)
       ..usePrivateKey(privateKeyPath);
-    final configuredHost = const String.fromEnvironment('PIGEON_LAN_HOST');
+    final configuredHost = const String.fromEnvironment('ACTENT_LAN_HOST');
     final host = configuredHost.isNotEmpty
         ? configuredHost
         : await _firstLanIpv4();
     if (host == null || host.isEmpty) {
       throw StateError('no non-loopback IPv4 address is available');
     }
-    return PigeonLanServerConfig(
+    return ActentLanServerConfig(
       securityContext: securityContext,
       host: host,
       certificateSha256: await _certificateSha256(certificateFile),
@@ -481,8 +481,8 @@ class PigeonLanServerConfig {
   }
 }
 
-class PigeonEndpoint {
-  const PigeonEndpoint({
+class ActentEndpoint {
+  const ActentEndpoint({
     this.relayServer,
     this.relayTopic,
     this.relayAuthorization,
@@ -499,7 +499,7 @@ class PigeonEndpoint {
   final String? certificateSha256;
 }
 
-PigeonEndpoint _endpoint(Device device) {
+ActentEndpoint _endpoint(Device device) {
   final endpoint = device.endpoint;
   final relayServer = switch (endpoint['relayUrl']) {
     String value when Uri.tryParse(value)?.hasScheme == true => Uri.parse(
@@ -508,7 +508,7 @@ PigeonEndpoint _endpoint(Device device) {
     _ => null,
   };
   final port = endpoint['lanPort'];
-  return PigeonEndpoint(
+  return ActentEndpoint(
     relayServer: relayServer,
     relayTopic: endpoint['relayTopic'] as String?,
     relayAuthorization: endpoint['relayAuthorization'] as String?,
@@ -549,7 +549,7 @@ class _UnavailablePacketConnection implements PacketConnection {
 }
 
 String _newTopic() =>
-    'pigeon-${base64UrlEncode(List<int>.generate(32, (_) => Random.secure().nextInt(256))).replaceAll('=', '')}';
+    'actent-${base64UrlEncode(List<int>.generate(32, (_) => Random.secure().nextInt(256))).replaceAll('=', '')}';
 
 bool _safePathComponent(String value) =>
     value.isNotEmpty &&

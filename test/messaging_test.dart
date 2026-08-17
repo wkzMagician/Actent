@@ -4,14 +4,14 @@ import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:pengion/features/messaging/attachment_chunks.dart';
-import 'package:pengion/features/messaging/attachment_transfer_store.dart';
-import 'package:pengion/features/messaging/message_connection.dart';
-import 'package:pengion/features/messaging/messaging_packet.dart';
-import 'package:pengion/features/messaging/packet_crypto.dart';
-import 'package:pengion/features/messaging/seen_packet_store.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/pigeon_core/pigeon_router.dart';
+import 'package:actent/features/messaging/attachment_chunks.dart';
+import 'package:actent/features/messaging/attachment_transfer_store.dart';
+import 'package:actent/features/messaging/message_connection.dart';
+import 'package:actent/features/messaging/messaging_packet.dart';
+import 'package:actent/features/messaging/packet_crypto.dart';
+import 'package:actent/features/messaging/seen_packet_store.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/actent_core/actent_router.dart';
 
 void main() {
   test('encrypts and authenticates packets with X25519 and AES-GCM', () async {
@@ -217,7 +217,7 @@ void main() {
   );
 
   test(
-    'Pigeon protocol payloads are encrypted before generic packet transport',
+    'Actent protocol payloads are encrypted before generic packet transport',
     () async {
       final senderIdentity = await PacketIdentity.generate();
       final recipientIdentity = await PacketIdentity.generate();
@@ -240,7 +240,7 @@ void main() {
       await sender.send(
         recipientId: 'recipient',
         payload: const <String, Object?>{
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'type': 'workRequest',
         },
       );
@@ -259,7 +259,7 @@ void main() {
           transport.sent.single,
           expectedSenderId: 'sender',
         ),
-        throwsA(isA<DuplicatePigeonPacketException>()),
+        throwsA(isA<DuplicateActentPacketException>()),
       );
     },
   );

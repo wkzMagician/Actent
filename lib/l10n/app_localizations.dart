@@ -101,13 +101,13 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Pengion'**
+  /// **'Actent'**
   String get appTitle;
 
   /// No description provided for @startupLoading.
   ///
   /// In en, this message translates to:
-  /// **'Starting Pengion…'**
+  /// **'Starting Actent…'**
   String get startupLoading;
 
   /// No description provided for @startupPreparing.
@@ -119,13 +119,13 @@ abstract class AppLocalizations {
   /// No description provided for @startupFailed.
   ///
   /// In en, this message translates to:
-  /// **'Pengion failed to start'**
+  /// **'Actent failed to start'**
   String get startupFailed;
 
   /// No description provided for @trayQuit.
   ///
   /// In en, this message translates to:
-  /// **'Quit Pengion'**
+  /// **'Quit Actent'**
   String get trayQuit;
 
   /// No description provided for @inbox.
@@ -275,7 +275,7 @@ abstract class AppLocalizations {
   /// No description provided for @languageDescription.
   ///
   /// In en, this message translates to:
-  /// **'Choose the language used by Pengion.'**
+  /// **'Choose the language used by Actent.'**
   String get languageDescription;
 
   /// No description provided for @languageEnglish.
@@ -329,13 +329,13 @@ abstract class AppLocalizations {
   /// No description provided for @relaySettingsSaved.
   ///
   /// In en, this message translates to:
-  /// **'Relay settings saved; restart Pengion to reconnect.'**
+  /// **'Relay settings saved; restart Actent to reconnect.'**
   String get relaySettingsSaved;
 
   /// No description provided for @restartToReconnect.
   ///
   /// In en, this message translates to:
-  /// **'Restart Pengion to reconnect.'**
+  /// **'Restart Actent to reconnect.'**
   String get restartToReconnect;
 
   /// No description provided for @saveFailed.

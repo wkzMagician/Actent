@@ -1,8 +1,8 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pairing/pairing.dart';
-import 'package:pengion/features/pairing/lan_pairing.dart';
+import 'package:actent/features/pairing/pairing.dart';
+import 'package:actent/features/pairing/lan_pairing.dart';
 
 void main() {
   test('encodes an invite as a portable URI without private credentials', () {

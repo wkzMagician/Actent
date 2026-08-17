@@ -10,19 +10,19 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => 'Pengion';
+  String get appTitle => 'Actent';
 
   @override
-  String get startupLoading => '正在启动 Pengion…';
+  String get startupLoading => '正在启动 Actent…';
 
   @override
   String get startupPreparing => '正在准备本地数据和设备身份';
 
   @override
-  String get startupFailed => 'Pengion 启动失败';
+  String get startupFailed => 'Actent 启动失败';
 
   @override
-  String get trayQuit => '退出 Pengion';
+  String get trayQuit => '退出 Actent';
 
   @override
   String get inbox => '收件箱';
@@ -99,7 +99,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get language => '语言';
 
   @override
-  String get languageDescription => '选择 Pengion 使用的语言。';
+  String get languageDescription => '选择 Actent 使用的语言。';
 
   @override
   String get languageEnglish => 'English';
@@ -126,10 +126,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invalidRelayUrl => 'Relay URL 无效。';
 
   @override
-  String get relaySettingsSaved => 'Relay 设置已保存；重启 Pengion 后重新连接。';
+  String get relaySettingsSaved => 'Relay 设置已保存；重启 Actent 后重新连接。';
 
   @override
-  String get restartToReconnect => '重启 Pengion 后重新连接。';
+  String get restartToReconnect => '重启 Actent 后重新连接。';
 
   @override
   String saveFailed(Object error) {

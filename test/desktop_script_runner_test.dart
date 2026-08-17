@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/work/desktop/desktop_script_runner.dart';
-import 'package:pengion/features/work/work_runner.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/work/desktop/desktop_script_runner.dart';
+import 'package:actent/features/work/work_runner.dart';
 
 void main() {
   test('writes one JSON document to stdin and bounds stderr', () async {
@@ -33,7 +33,7 @@ void main() {
     );
 
     final decoded = jsonDecode(utf8.decode(process.stdinBytes));
-    expect(decoded['schemaVersion'], pigeonSchemaVersion);
+    expect(decoded['schemaVersion'], actentSchemaVersion);
     expect(result.status, WorkReceiptStatus.failed);
     expect(result.errorCode, 'exit_code_7');
     expect(result.summary!.length, 8192);
@@ -97,16 +97,16 @@ Work _work() => Work(
   revision: 1,
   name: 'script',
   ownerDeviceId: 'desktop',
-  acceptedContentTypes: const {PigeonContentType.text},
+  acceptedContentTypes: const {ActentContentType.text},
 );
 
-PigeonMessage _message() => PigeonMessage(
+ActentMessage _message() => ActentMessage(
   id: 'message-1',
   traceId: 'trace-1',
   createdAt: DateTime.utc(2026),
-  source: const PigeonSource(kind: 'test'),
-  content: PigeonContent(
-    type: PigeonContentType.text,
+  source: const ActentSource(kind: 'test'),
+  content: ActentContent(
+    type: ActentContentType.text,
     data: const {'text': 'hello'},
   ),
 );

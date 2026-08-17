@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/wkzMagician/pengion/schema/pigeon-message-v1.json",
-  "title": "PigeonMessage",
-  "description": "Versioned cross-device content envelope used by Pigeon.",
+  "$id": "https://github.com/wkzMagician/actent/schema/actent-message-v1.json",
+  "title": "ActentMessage",
+  "description": "Versioned cross-device content envelope used by Actent.",
   "type": "object",
   "additionalProperties": false,
   "required": [

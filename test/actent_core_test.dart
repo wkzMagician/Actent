@@ -1,29 +1,29 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pigeon_core/attachment_retention.dart';
-import 'package:pengion/features/pigeon_core/configuration_transfer.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/pigeon_core/pigeon_repository.dart';
-import 'package:pengion/features/pigeon_core/pigeon_router.dart';
-import 'package:pengion/features/pigeon_core/pigeon_store.dart';
-import 'package:pengion/features/pigeon_core/work_catalog.dart';
-import 'package:pengion/features/work/work_runner.dart';
+import 'package:actent/features/actent_core/attachment_retention.dart';
+import 'package:actent/features/actent_core/configuration_transfer.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/actent_core/actent_repository.dart';
+import 'package:actent/features/actent_core/actent_router.dart';
+import 'package:actent/features/actent_core/actent_store.dart';
+import 'package:actent/features/actent_core/work_catalog.dart';
+import 'package:actent/features/work/work_runner.dart';
 
 void main() {
-  group('Pigeon schema', () {
+  group('Actent schema', () {
     test('round trips a versioned message', () {
-      final message = PigeonMessage(
+      final message = ActentMessage(
         id: 'message-1',
         traceId: 'trace-1',
         createdAt: DateTime.utc(2026, 1, 1),
-        source: const PigeonSource(kind: 'share', deviceId: 'phone'),
-        content: PigeonContent(
-          type: PigeonContentType.text,
+        source: const ActentSource(kind: 'share', deviceId: 'phone'),
+        content: ActentContent(
+          type: ActentContentType.text,
           data: const {'text': 'hello'},
         ),
         attachments: const [
-          PigeonAttachment(
+          ActentAttachment(
             id: 'attachment-1',
             name: 'note.txt',
             mimeType: 'text/plain',
@@ -33,7 +33,7 @@ void main() {
         ],
       );
 
-      final decoded = PigeonMessage.fromJson(message.toJson());
+      final decoded = ActentMessage.fromJson(message.toJson());
       expect(decoded.id, message.id);
       expect(decoded.content.data['text'], 'hello');
       expect(decoded.attachments.single.byteLength, 5);
@@ -43,14 +43,14 @@ void main() {
       final work = Work.nullWork(id: 'null', ownerDeviceId: 'desktop');
 
       expect(
-        PigeonContentType.values.every(
+        ActentContentType.values.every(
           (type) => work.accepts(
-            PigeonMessage(
+            ActentMessage(
               id: 'message-${type.name}',
               traceId: 'trace-${type.name}',
               createdAt: DateTime.utc(2026),
-              source: const PigeonSource(kind: 'test'),
-              content: PigeonContent(type: type),
+              source: const ActentSource(kind: 'test'),
+              content: ActentContent(type: type),
             ),
           ),
         ),
@@ -60,27 +60,27 @@ void main() {
 
     test('rejects an unsupported schema version before accepting content', () {
       expect(
-        () => PigeonMessage.fromJson(<String, Object?>{
+        () => ActentMessage.fromJson(<String, Object?>{
           'id': 'message-1',
           'traceId': 'trace-1',
           'schemaVersion': 2,
         }),
-        throwsA(isA<PigeonValidationException>()),
+        throwsA(isA<ActentValidationException>()),
       );
     });
 
     test('rejects unknown envelope and attachment fields', () {
-      final message = PigeonMessage(
+      final message = ActentMessage(
         id: 'message-1',
         traceId: 'trace-1',
         createdAt: DateTime.utc(2026, 1, 1),
-        source: const PigeonSource(kind: 'share'),
-        content: PigeonContent(
-          type: PigeonContentType.text,
+        source: const ActentSource(kind: 'share'),
+        content: ActentContent(
+          type: ActentContentType.text,
           data: const {'text': 'hello'},
         ),
         attachments: const [
-          PigeonAttachment(
+          ActentAttachment(
             id: 'attachment-1',
             name: 'note.txt',
             mimeType: 'text/plain',
@@ -91,8 +91,8 @@ void main() {
       );
       final unknownEnvelope = message.toJson()..['unexpected'] = true;
       expect(
-        () => PigeonMessage.fromJson(unknownEnvelope),
-        throwsA(isA<PigeonValidationException>()),
+        () => ActentMessage.fromJson(unknownEnvelope),
+        throwsA(isA<ActentValidationException>()),
       );
 
       final unknownAttachment = message.toJson();
@@ -101,34 +101,34 @@ void main() {
       attachments[0] = Map<String, Object?>.from(attachments[0] as Map)
         ..['unexpected'] = true;
       expect(
-        () => PigeonMessage.fromJson(unknownAttachment),
-        throwsA(isA<PigeonValidationException>()),
+        () => ActentMessage.fromJson(unknownAttachment),
+        throwsA(isA<ActentValidationException>()),
       );
     });
   });
 
-  group('Pigeon repository and routing', () {
-    late MemoryPigeonJsonStore store;
-    late PigeonRepository repository;
+  group('Actent repository and routing', () {
+    late MemoryActentJsonStore store;
+    late ActentRepository repository;
     late Work work;
-    late PigeonMessage message;
+    late ActentMessage message;
 
     setUp(() {
-      store = MemoryPigeonJsonStore();
-      repository = PigeonRepository(store);
+      store = MemoryActentJsonStore();
+      repository = ActentRepository(store);
       work = Work(
         id: 'work-1',
         revision: 1,
         name: 'Store text',
         ownerDeviceId: 'desktop',
-        acceptedContentTypes: const {PigeonContentType.text},
+        acceptedContentTypes: const {ActentContentType.text},
       );
-      message = PigeonMessage(
+      message = ActentMessage(
         id: 'message-1',
         traceId: 'trace-1',
         createdAt: DateTime.utc(2026, 1, 1),
-        source: const PigeonSource(kind: 'share', deviceId: 'phone'),
-        content: PigeonContent(type: PigeonContentType.text),
+        source: const ActentSource(kind: 'share', deviceId: 'phone'),
+        content: ActentContent(type: ActentContentType.text),
       );
     });
 
@@ -146,18 +146,18 @@ void main() {
     test(
       'deleting a message removes only its unreferenced attachment files',
       () async {
-        final root = await Directory.systemTemp.createTemp('pigeon-retention-');
+        final root = await Directory.systemTemp.createTemp('actent-retention-');
         try {
           final file = File('${root.path}${Platform.pathSeparator}payload.txt');
           await file.writeAsString('payload');
-          final attachmentMessage = PigeonMessage(
+          final attachmentMessage = ActentMessage(
             id: 'message-with-file',
             traceId: 'trace-file',
             createdAt: DateTime.now().toUtc(),
-            source: const PigeonSource(kind: 'share'),
-            content: PigeonContent(type: PigeonContentType.file),
+            source: const ActentSource(kind: 'share'),
+            content: ActentContent(type: ActentContentType.file),
             attachments: [
-              PigeonAttachment(
+              ActentAttachment(
                 id: 'attachment-file',
                 name: 'payload.txt',
                 mimeType: 'text/plain',
@@ -208,15 +208,15 @@ void main() {
           ),
         );
 
-        final exported = await PigeonConfigurationTransfer(repository).export();
+        final exported = await ActentConfigurationTransfer(repository).export();
         final encoded = exported.toString();
         expect(encoded, isNot(contains('secret')));
         expect(exported['messages'], isNull);
         expect((exported['works'] as List).length, 1);
         expect((exported['devices'] as List).length, 1);
 
-        final imported = PigeonRepository(MemoryPigeonJsonStore());
-        await PigeonConfigurationTransfer(imported).import(exported);
+        final imported = ActentRepository(MemoryActentJsonStore());
+        await ActentConfigurationTransfer(imported).import(exported);
         expect((await imported.getWork('export-work'))!.name, 'Export me');
         expect(await imported.getMessage(message.id), isNull);
         expect(
@@ -229,7 +229,7 @@ void main() {
     test('routes remote work through the connection contract', () async {
       final connection = FakeMessageConnection();
       final queue = WorkQueueCoordinator(repository: repository);
-      final router = PigeonRouter(
+      final router = ActentRouter(
         deviceId: 'phone',
         repository: repository,
         connection: connection,
@@ -254,7 +254,7 @@ void main() {
       final connection = FakeMessageConnection();
       final queue = WorkQueueCoordinator(repository: repository)
         ..register(work.id, const NullWorkRunner());
-      final router = PigeonRouter(
+      final router = ActentRouter(
         deviceId: 'desktop',
         repository: repository,
         connection: connection,
@@ -274,7 +274,7 @@ void main() {
 
       final receipt = await router.receive({
         'type': 'workRequest',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
         'request': request.toJson(),
       });
       await pumpEventQueue();
@@ -287,7 +287,7 @@ void main() {
     test('applies catalog snapshots and deltas to repository state', () async {
       final connection = FakeMessageConnection();
       final catalog = WorkCatalog();
-      final router = PigeonRouter(
+      final router = ActentRouter(
         deviceId: 'desktop',
         repository: repository,
         connection: connection,
@@ -326,10 +326,10 @@ void main() {
             revision: 1,
             name: 'Local',
             ownerDeviceId: 'desktop',
-            acceptedContentTypes: const {PigeonContentType.text},
+            acceptedContentTypes: const {ActentContentType.text},
           ),
         );
-        final router = PigeonRouter(
+        final router = ActentRouter(
           deviceId: 'desktop',
           repository: repository,
           connection: connection,
@@ -343,7 +343,7 @@ void main() {
             revision: 2,
             name: 'Updated',
             ownerDeviceId: 'desktop',
-            acceptedContentTypes: const {PigeonContentType.text},
+            acceptedContentTypes: const {ActentContentType.text},
           ),
         );
         await router.sendCatalogDelta('phone');
@@ -456,7 +456,7 @@ void main() {
         revision: 1,
         name: 'Limited',
         ownerDeviceId: 'desktop',
-        acceptedContentTypes: const {PigeonContentType.text},
+        acceptedContentTypes: const {ActentContentType.text},
         queueLimit: 1,
       );
       final first = WorkRequest(
@@ -500,7 +500,7 @@ void main() {
       revision: 1,
       name: 'One',
       ownerDeviceId: 'desktop',
-      acceptedContentTypes: const {PigeonContentType.text},
+      acceptedContentTypes: const {ActentContentType.text},
     );
     final catalog = WorkCatalog(revision: 1, works: [work]);
     catalog.applyDelta(
@@ -512,7 +512,7 @@ void main() {
           revision: 1,
           name: 'Two',
           ownerDeviceId: 'desktop',
-          acceptedContentTypes: const {PigeonContentType.url},
+          acceptedContentTypes: const {ActentContentType.url},
         ),
       ],
       removedWorkIds: const [],

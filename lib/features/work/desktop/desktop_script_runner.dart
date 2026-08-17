@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import '../../pigeon_core/pigeon_models.dart';
+import '../../actent_core/actent_models.dart';
 import '../work_runner.dart';
 
 class DesktopScriptConfig {
@@ -142,7 +142,7 @@ class DesktopScriptRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async {

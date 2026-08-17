@@ -3,16 +3,16 @@ import 'dart:typed_data';
 
 import 'package:dartloom_storage/dartloom_storage.dart';
 
-import 'pigeon_models.dart';
+import 'actent_models.dart';
 
-abstract interface class PigeonJsonStore {
+abstract interface class ActentJsonStore {
   Future<Object?> read(String key);
   Future<void> write(String key, Object? value);
   Future<void> delete(String key);
   Future<List<String>> list({String prefix = ''});
 }
 
-class MemoryPigeonJsonStore implements PigeonJsonStore {
+class MemoryActentJsonStore implements ActentJsonStore {
   final Map<String, Object?> _values = {};
 
   @override
@@ -31,8 +31,8 @@ class MemoryPigeonJsonStore implements PigeonJsonStore {
 
 /// Bridges the Dartloom storage capability to the Core's small JSON contract.
 /// The Core only sees this contract and can therefore use a fake in tests.
-class ReplicaPigeonJsonStore implements PigeonJsonStore {
-  ReplicaPigeonJsonStore(this.replica);
+class ReplicaActentJsonStore implements ActentJsonStore {
+  ReplicaActentJsonStore(this.replica);
 
   final ObjectStore replica;
 
@@ -43,7 +43,7 @@ class ReplicaPigeonJsonStore implements PigeonJsonStore {
     try {
       return jsonDecode(utf8.decode(bytes));
     } on FormatException catch (error) {
-      throw PigeonValidationException(
+      throw ActentValidationException(
         key,
         'stored value is not valid JSON: $error',
       );
@@ -70,19 +70,19 @@ class ReplicaPigeonJsonStore implements PigeonJsonStore {
         ..sort();
 }
 
-class PigeonRepository {
-  PigeonRepository(this.store);
+class ActentRepository {
+  ActentRepository(this.store);
 
-  final PigeonJsonStore store;
+  final ActentJsonStore store;
 
-  Future<void> saveMessage(PigeonMessage message) =>
+  Future<void> saveMessage(ActentMessage message) =>
       store.write(_key('messages', message.id), message.toJson());
 
-  Future<PigeonMessage?> getMessage(String id) async =>
-      _read(_key('messages', id), PigeonMessage.fromJson);
+  Future<ActentMessage?> getMessage(String id) async =>
+      _read(_key('messages', id), ActentMessage.fromJson);
 
-  Future<List<PigeonMessage>> listMessages() =>
-      _list('messages/', PigeonMessage.fromJson);
+  Future<List<ActentMessage>> listMessages() =>
+      _list('messages/', ActentMessage.fromJson);
 
   Future<void> deleteMessage(String id) async {
     await store.delete(_key('messages', id));

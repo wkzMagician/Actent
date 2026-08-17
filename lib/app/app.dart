@@ -3,14 +3,14 @@ import 'package:flutter/foundation.dart';
 import 'package:dartloom_pairing/qr_adapters.dart';
 
 import '../l10n/app_localizations.dart';
-import '../features/pigeon_core/pigeon_store.dart';
-import '../features/pigeon_core/pigeon_home_page.dart';
-import '../features/pigeon_core/pigeon_router.dart';
-import '../features/pigeon_core/pigeon_transport.dart';
+import '../features/actent_core/actent_store.dart';
+import '../features/actent_core/actent_home_page.dart';
+import '../features/actent_core/actent_router.dart';
+import '../features/actent_core/actent_transport.dart';
 import '../features/pairing/pairing.dart';
 import '../features/pairing/pairing_relay.dart';
-import '../features/pigeon_core/attachment_retention.dart';
-import '../features/pigeon_platform/android_share_bridge.dart';
+import '../features/actent_core/attachment_retention.dart';
+import '../features/actent_platform/android_share_bridge.dart';
 import '../features/work/desktop/desktop_script_runner.dart';
 import '../features/work/work_runner.dart';
 
@@ -43,7 +43,7 @@ class DartloomApp extends StatefulWidget {
     this.onLocaleChanged,
   });
 
-  final PigeonRepository? repository;
+  final ActentRepository? repository;
   final AndroidShareBridge? shareBridge;
   final String? deviceId;
   final String? publicKey;
@@ -55,7 +55,7 @@ class DartloomApp extends StatefulWidget {
   final String? lanHost;
   final int? lanPort;
   final String? lanCertificateSha256;
-  final PigeonLanServerConfig? lanServerConfig;
+  final ActentLanServerConfig? lanServerConfig;
   final PairingDiscovery? pairingDiscovery;
   final PairingRelayHandshake? pairingHandshake;
   final AttachmentRetentionManager? attachmentRetention;
@@ -65,7 +65,7 @@ class DartloomApp extends StatefulWidget {
   final Duration initialPacketDedupRetention;
   final Future<void> Function(Duration value)? onPacketDedupRetentionChanged;
   final DesktopSecretResolver? desktopSecrets;
-  final PigeonRouter? router;
+  final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Locale? locale;
   final Future<void> Function(Locale locale)? onLocaleChanged;
@@ -95,7 +95,7 @@ class _DartloomAppState extends State<DartloomApp> {
     supportedLocales: AppLocalizations.supportedLocales,
     locale: _locale,
     theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-    home: PigeonHomePage(
+    home: ActentHomePage(
       repository: widget.repository,
       shareBridge: widget.shareBridge,
       deviceId: widget.deviceId,

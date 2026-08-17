@@ -1,4 +1,4 @@
-package com.example.pengion
+package com.example.actent
 
 import android.content.Intent
 import android.net.Uri
@@ -46,7 +46,7 @@ class ShareIntentManifestTest {
         val source = File(context.cacheDir, "instrumented-share.txt").apply {
             writeText("private share payload")
         }
-        val attachmentRoot = File(context.filesDir, "pigeon/attachments")
+        val attachmentRoot = File(context.filesDir, "actent/attachments")
         val before = attachmentRoot.walkTopDown().count { it.isFile }
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_SEND

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/work/android/android_work_runner.dart';
-import 'package:pengion/features/work/work_bindings.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/work/android/android_work_runner.dart';
+import 'package:actent/features/work/work_bindings.dart';
 
 void main() {
   test('round trips a desktop script binding without shell semantics', () {
@@ -33,7 +33,7 @@ void main() {
         'kind': 'android-intent',
         'action': 'android.intent.action.SEND',
         'categories': ['android.intent.category.DEFAULT'],
-        'extras': {'priority': 2, 'label': 'Pigeon'},
+        'extras': {'priority': 2, 'label': 'Actent'},
         'chooser': true,
         'attachmentPlacement': 'stream',
       },

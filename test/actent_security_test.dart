@@ -1,24 +1,24 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/pigeon_core/pigeon_repository.dart';
-import 'package:pengion/features/pigeon_core/pigeon_router.dart';
-import 'package:pengion/features/pigeon_core/pigeon_store.dart';
-import 'package:pengion/features/pigeon_core/work_catalog.dart';
-import 'package:pengion/features/work/work_runner.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/actent_core/actent_repository.dart';
+import 'package:actent/features/actent_core/actent_router.dart';
+import 'package:actent/features/actent_core/actent_store.dart';
+import 'package:actent/features/actent_core/work_catalog.dart';
+import 'package:actent/features/work/work_runner.dart';
 
 void main() {
   test(
     'rejects a receipt from a device that did not execute the request',
     () async {
-      final repository = PigeonRepository(MemoryPigeonJsonStore());
+      final repository = ActentRepository(MemoryActentJsonStore());
       final request = WorkRequest(
         requestId: 'request-1',
-        message: PigeonMessage(
+        message: ActentMessage(
           id: 'message-1',
           traceId: 'trace-1',
           createdAt: DateTime.now().toUtc(),
-          source: const PigeonSource(kind: 'test', deviceId: 'local'),
-          content: PigeonContent(type: PigeonContentType.text),
+          source: const ActentSource(kind: 'test', deviceId: 'local'),
+          content: ActentContent(type: ActentContentType.text),
         ),
         workId: 'work-1',
         workRevision: 1,
@@ -34,7 +34,7 @@ void main() {
         status: WorkReceiptStatus.succeeded,
         createdAt: DateTime.now().toUtc(),
       );
-      final router = PigeonRouter(
+      final router = ActentRouter(
         deviceId: 'local',
         repository: repository,
         connection: FakeMessageConnection(),
@@ -44,10 +44,10 @@ void main() {
       expect(
         () => router.receive({
           'type': 'workReceipt',
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'receipt': receipt.toJson(),
         }, authenticatedSenderId: 'unexpected-device'),
-        throwsA(isA<PigeonValidationException>()),
+        throwsA(isA<ActentValidationException>()),
       );
     },
   );
@@ -55,8 +55,8 @@ void main() {
   test(
     'rejects catalog entries whose owner is not the authenticated peer',
     () async {
-      final repository = PigeonRepository(MemoryPigeonJsonStore());
-      final router = PigeonRouter(
+      final repository = ActentRepository(MemoryActentJsonStore());
+      final router = ActentRouter(
         deviceId: 'local',
         repository: repository,
         connection: FakeMessageConnection(),

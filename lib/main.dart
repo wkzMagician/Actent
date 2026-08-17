@@ -7,17 +7,17 @@ import 'app/app.dart';
 import 'app/attachment_directory.dart';
 import 'app/object_store_factory.dart';
 import 'app/platform_services.dart';
-import 'app/pigeon_dependencies.dart';
+import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
-import 'features/pigeon_core/attachment_retention.dart';
-import 'features/pigeon_core/device_identity.dart';
-import 'features/pigeon_core/pigeon_models.dart';
-import 'features/pigeon_core/pigeon_router.dart';
-import 'features/pigeon_core/pigeon_transport.dart';
+import 'features/actent_core/attachment_retention.dart';
+import 'features/actent_core/device_identity.dart';
+import 'features/actent_core/actent_models.dart';
+import 'features/actent_core/actent_router.dart';
+import 'features/actent_core/actent_transport.dart';
 import 'features/pairing/pairing_relay.dart';
 import 'features/pairing/pairing.dart';
-import 'features/pigeon_core/secret_repository.dart';
-import 'features/pigeon_platform/android_share_bridge.dart';
+import 'features/actent_core/secret_repository.dart';
+import 'features/actent_platform/android_share_bridge.dart';
 import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
@@ -31,24 +31,24 @@ Future<DartloomApp> _createApplication() async {
   await singleInstance?.ensureSingleInstance();
   final appSettings = SharedPreferencesSettingsStore();
   final secretSettings = const SecureSettingsStore();
-  final objectStore = await openPigeonObjectStore();
+  final objectStore = await openActentObjectStore();
   final savedLocale = await appSettings.read('app.locale');
   final initialLocale = _localeFromCode(
     savedLocale is String ? savedLocale : null,
   );
-  final repository = createPigeonRepository(objectStore);
-  final secretRepository = PigeonSecretRepository(secretSettings);
+  final repository = createActentRepository(objectStore);
+  final secretRepository = ActentSecretRepository(secretSettings);
   final identity = await DeviceIdentityRepository(secretRepository)
       .loadOrCreate();
-  final relay = await PigeonRelaySettings.load(secretRepository);
-  final attachmentRoot = await resolvePigeonAttachmentDirectory();
-  final lanServerConfig = await PigeonLanServerConfig.fromEnvironment();
+  final relay = await ActentRelaySettings.load(secretRepository);
+  final attachmentRoot = await resolveActentAttachmentDirectory();
+  final lanServerConfig = await ActentLanServerConfig.fromEnvironment();
   final retentionPreferences = AttachmentRetentionPreferences(secretRepository);
   final attachmentRetention = await retentionPreferences.load();
   final dedupPreferences = PacketDedupRetentionPreferences(secretRepository);
   final packetDedupRetention = await dedupPreferences.load();
   final queue = WorkQueueCoordinator(repository: repository);
-  final transport = PigeonTransportService(
+  final transport = ActentTransportService(
     deviceId: identity.deviceId,
     identity: identity.packetIdentity,
     repository: repository,
@@ -57,7 +57,7 @@ Future<DartloomApp> _createApplication() async {
     seenPacketRetention: packetDedupRetention,
     lanServerConfig: lanServerConfig,
   );
-  final router = PigeonRouter(
+  final router = ActentRouter(
     deviceId: identity.deviceId,
     repository: repository,
     connection: transport,
@@ -67,7 +67,7 @@ Future<DartloomApp> _createApplication() async {
   await repository.saveDevice(
     Device(
       id: identity.deviceId,
-      displayName: 'Pigeon ${defaultTargetPlatform.name}',
+      displayName: 'Actent ${defaultTargetPlatform.name}',
       platform: defaultTargetPlatform.name,
       publicKey: identity.publicKey,
       endpoint: {

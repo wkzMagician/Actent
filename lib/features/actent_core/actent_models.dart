@@ -1,21 +1,21 @@
 import 'dart:collection';
 
-const pigeonSchemaVersion = 1;
+const actentSchemaVersion = 1;
 
-enum PigeonContentType { text, url, image, file, json }
+enum ActentContentType { text, url, image, file, json }
 
-extension PigeonContentTypeJson on PigeonContentType {
+extension ActentContentTypeJson on ActentContentType {
   String get value => name;
 
-  static PigeonContentType parse(Object? value, String path) {
+  static ActentContentType parse(Object? value, String path) {
     if (value is! String) {
-      throw PigeonValidationException(path, 'must be a string');
+      throw ActentValidationException(path, 'must be a string');
     }
-    return PigeonContentType.values.firstWhere(
+    return ActentContentType.values.firstWhere(
       (item) => item.value == value,
-      orElse: () => throw PigeonValidationException(
+      orElse: () => throw ActentValidationException(
         path,
-        'must be one of: ${PigeonContentType.values.map((item) => item.value).join(', ')}',
+        'must be one of: ${ActentContentType.values.map((item) => item.value).join(', ')}',
       ),
     );
   }
@@ -28,28 +28,28 @@ extension WorkReceiptStatusJson on WorkReceiptStatus {
 
   static WorkReceiptStatus parse(Object? value, String path) {
     if (value is! String) {
-      throw PigeonValidationException(path, 'must be a string');
+      throw ActentValidationException(path, 'must be a string');
     }
     return WorkReceiptStatus.values.firstWhere(
       (item) => item.value == value,
       orElse: () =>
-          throw PigeonValidationException(path, 'unknown receipt status'),
+          throw ActentValidationException(path, 'unknown receipt status'),
     );
   }
 }
 
-class PigeonValidationException implements Exception {
-  const PigeonValidationException(this.path, this.message);
+class ActentValidationException implements Exception {
+  const ActentValidationException(this.path, this.message);
 
   final String path;
   final String message;
 
   @override
-  String toString() => 'Invalid Pigeon document at $path: $message';
+  String toString() => 'Invalid Actent document at $path: $message';
 }
 
-class PigeonSource {
-  const PigeonSource({
+class ActentSource {
+  const ActentSource({
     required this.kind,
     this.deviceId,
     this.appName,
@@ -68,7 +68,7 @@ class PigeonSource {
     if (platform != null) 'platform': platform,
   };
 
-  factory PigeonSource.fromJson(Object? value) {
+  factory ActentSource.fromJson(Object? value) {
     final json = _map(value, 'source');
     _rejectUnknown(json, const {
       'kind',
@@ -76,7 +76,7 @@ class PigeonSource {
       'appName',
       'platform',
     }, 'source');
-    return PigeonSource(
+    return ActentSource(
       kind: _string(json, 'kind', 'source.kind'),
       deviceId: _optionalString(json, 'deviceId', 'source.deviceId'),
       appName: _optionalString(json, 'appName', 'source.appName'),
@@ -85,11 +85,11 @@ class PigeonSource {
   }
 }
 
-class PigeonContent {
-  PigeonContent({required this.type, Map<String, Object?> data = const {}})
+class ActentContent {
+  ActentContent({required this.type, Map<String, Object?> data = const {}})
     : data = UnmodifiableMapView(Map<String, Object?>.from(data));
 
-  final PigeonContentType type;
+  final ActentContentType type;
   final Map<String, Object?> data;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -97,16 +97,16 @@ class PigeonContent {
     ...data,
   };
 
-  factory PigeonContent.fromJson(Object? value) {
+  factory ActentContent.fromJson(Object? value) {
     final json = _map(value, 'content');
-    final type = PigeonContentTypeJson.parse(json['type'], 'content.type');
+    final type = ActentContentTypeJson.parse(json['type'], 'content.type');
     final data = Map<String, Object?>.from(json)..remove('type');
-    return PigeonContent(type: type, data: data);
+    return ActentContent(type: type, data: data);
   }
 }
 
-class PigeonAttachment {
-  const PigeonAttachment({
+class ActentAttachment {
+  const ActentAttachment({
     required this.id,
     required this.name,
     required this.mimeType,
@@ -128,7 +128,7 @@ class PigeonAttachment {
     'handle': handle,
   };
 
-  factory PigeonAttachment.fromJson(Object? value, int index) {
+  factory ActentAttachment.fromJson(Object? value, int index) {
     final path = 'attachments[$index]';
     final json = _map(value, path);
     _rejectUnknown(json, const {
@@ -140,12 +140,12 @@ class PigeonAttachment {
     }, path);
     final length = _integer(json, 'byteLength', '$path.byteLength');
     if (length < 0) {
-      throw PigeonValidationException(
+      throw ActentValidationException(
         '$path.byteLength',
         'must not be negative',
       );
     }
-    return PigeonAttachment(
+    return ActentAttachment(
       id: _string(json, 'id', '$path.id'),
       name: _string(json, 'name', '$path.name'),
       mimeType: _string(json, 'mimeType', '$path.mimeType'),
@@ -155,8 +155,8 @@ class PigeonAttachment {
   }
 }
 
-class PigeonMessage {
-  PigeonMessage({
+class ActentMessage {
+  ActentMessage({
     required this.id,
     required this.traceId,
     required this.createdAt,
@@ -164,16 +164,16 @@ class PigeonMessage {
     required this.content,
     this.attachments = const [],
     Map<String, Object?> metadata = const {},
-    this.schemaVersion = pigeonSchemaVersion,
+    this.schemaVersion = actentSchemaVersion,
   }) : metadata = UnmodifiableMapView(Map<String, Object?>.from(metadata));
 
   final String id;
   final String traceId;
   final int schemaVersion;
   final DateTime createdAt;
-  final PigeonSource source;
-  final PigeonContent content;
-  final List<PigeonAttachment> attachments;
+  final ActentSource source;
+  final ActentContent content;
+  final List<ActentAttachment> attachments;
   final Map<String, Object?> metadata;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -187,7 +187,7 @@ class PigeonMessage {
     'metadata': metadata,
   };
 
-  factory PigeonMessage.fromJson(Object? value) {
+  factory ActentMessage.fromJson(Object? value) {
     final json = _map(value, 'message');
     _rejectUnknown(json, const {
       'id',
@@ -200,27 +200,27 @@ class PigeonMessage {
       'metadata',
     }, 'message');
     final schemaVersion = _integer(json, 'schemaVersion', 'schemaVersion');
-    if (schemaVersion != pigeonSchemaVersion) {
-      throw PigeonValidationException(
+    if (schemaVersion != actentSchemaVersion) {
+      throw ActentValidationException(
         'schemaVersion',
-        'unsupported version $schemaVersion; expected $pigeonSchemaVersion',
+        'unsupported version $schemaVersion; expected $actentSchemaVersion',
       );
     }
     final attachmentsValue = json['attachments'];
     if (attachmentsValue is! List) {
-      throw const PigeonValidationException('attachments', 'must be an array');
+      throw const ActentValidationException('attachments', 'must be an array');
     }
     final metadata = _map(json['metadata'], 'metadata');
-    return PigeonMessage(
+    return ActentMessage(
       id: _string(json, 'id', 'id'),
       traceId: _string(json, 'traceId', 'traceId'),
       schemaVersion: schemaVersion,
       createdAt: _date(json, 'createdAt', 'createdAt'),
-      source: PigeonSource.fromJson(json['source']),
-      content: PigeonContent.fromJson(json['content']),
+      source: ActentSource.fromJson(json['source']),
+      content: ActentContent.fromJson(json['content']),
       attachments: [
         for (var index = 0; index < attachmentsValue.length; index++)
-          PigeonAttachment.fromJson(attachmentsValue[index], index),
+          ActentAttachment.fromJson(attachmentsValue[index], index),
       ],
       metadata: metadata,
     );
@@ -297,7 +297,7 @@ class Work {
   final String name;
   final String ownerDeviceId;
   final Set<String> allowedSourceDeviceIds;
-  final Set<PigeonContentType> acceptedContentTypes;
+  final Set<ActentContentType> acceptedContentTypes;
   final Duration timeout;
   final int queueLimit;
   final bool enabled;
@@ -314,11 +314,11 @@ class Work {
     revision: revision,
     name: name,
     ownerDeviceId: ownerDeviceId,
-    acceptedContentTypes: PigeonContentType.values.toSet(),
+    acceptedContentTypes: ActentContentType.values.toSet(),
     platformBindings: const {'kind': 'null'},
   );
 
-  bool accepts(PigeonMessage message) =>
+  bool accepts(ActentMessage message) =>
       enabled && acceptedContentTypes.contains(message.content.type);
 
   bool isAuthorized(String? sourceDeviceId) =>
@@ -349,7 +349,7 @@ class Work {
     );
     final accepted = json['acceptedContentTypes'];
     if (accepted is! List) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'acceptedContentTypes',
         'must be an array',
       );
@@ -357,7 +357,7 @@ class Work {
     final timeoutSeconds = _integer(json, 'timeoutSeconds', 'timeoutSeconds');
     final queueLimit = _integer(json, 'queueLimit', 'queueLimit');
     if (timeoutSeconds <= 0 || queueLimit <= 0) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'work',
         'timeout and queueLimit must be positive',
       );
@@ -370,7 +370,7 @@ class Work {
       allowedSourceDeviceIds: allowed.toSet(),
       acceptedContentTypes: {
         for (var index = 0; index < accepted.length; index++)
-          PigeonContentTypeJson.parse(
+          ActentContentTypeJson.parse(
             accepted[index],
             'acceptedContentTypes[$index]',
           ),
@@ -397,7 +397,7 @@ class WorkRequest {
   });
 
   final String requestId;
-  final PigeonMessage message;
+  final ActentMessage message;
   final String workId;
   final int workRevision;
   final String sourceDeviceId;
@@ -422,7 +422,7 @@ class WorkRequest {
     final json = _map(value, 'request');
     return WorkRequest(
       requestId: _string(json, 'requestId', 'requestId'),
-      message: PigeonMessage.fromJson(json['message']),
+      message: ActentMessage.fromJson(json['message']),
       workId: _string(json, 'workId', 'workId'),
       workRevision: _integer(json, 'workRevision', 'workRevision'),
       sourceDeviceId: _string(json, 'sourceDeviceId', 'sourceDeviceId'),
@@ -481,19 +481,19 @@ class WorkReceipt {
 
 Map<String, Object?> _map(Object? value, String path) {
   if (value is! Map) {
-    throw PigeonValidationException(path, 'must be an object');
+    throw ActentValidationException(path, 'must be an object');
   }
   try {
     return Map<String, Object?>.from(value);
   } on TypeError {
-    throw PigeonValidationException(path, 'must have string keys');
+    throw ActentValidationException(path, 'must have string keys');
   }
 }
 
 String _string(Map<String, Object?> json, String key, String path) {
   final value = json[key];
   if (value is! String || value.isEmpty) {
-    throw PigeonValidationException(path, 'must be a non-empty string');
+    throw ActentValidationException(path, 'must be a non-empty string');
   }
   return value;
 }
@@ -502,7 +502,7 @@ String? _optionalString(Map<String, Object?> json, String key, String path) {
   final value = json[key];
   if (value == null) return null;
   if (value is! String) {
-    throw PigeonValidationException(path, 'must be a string');
+    throw ActentValidationException(path, 'must be a string');
   }
   return value;
 }
@@ -510,7 +510,7 @@ String? _optionalString(Map<String, Object?> json, String key, String path) {
 int _integer(Map<String, Object?> json, String key, String path) {
   final value = json[key];
   if (value is! int) {
-    throw PigeonValidationException(path, 'must be an integer');
+    throw ActentValidationException(path, 'must be an integer');
   }
   return value;
 }
@@ -518,7 +518,7 @@ int _integer(Map<String, Object?> json, String key, String path) {
 bool _boolean(Map<String, Object?> json, String key, String path) {
   final value = json[key];
   if (value is! bool) {
-    throw PigeonValidationException(path, 'must be a boolean');
+    throw ActentValidationException(path, 'must be a boolean');
   }
   return value;
 }
@@ -531,7 +531,7 @@ void _rejectUnknown(
   final unknown = json.keys.where((key) => !allowed.contains(key)).toList()
     ..sort();
   if (unknown.isNotEmpty) {
-    throw PigeonValidationException(
+    throw ActentValidationException(
       path,
       'contains unknown fields: ${unknown.join(', ')}',
     );
@@ -541,18 +541,18 @@ void _rejectUnknown(
 DateTime _date(Map<String, Object?> json, String key, String path) {
   final value = json[key];
   if (value is! String) {
-    throw PigeonValidationException(path, 'must be an ISO-8601 string');
+    throw ActentValidationException(path, 'must be an ISO-8601 string');
   }
   final date = DateTime.tryParse(value);
   if (date == null) {
-    throw PigeonValidationException(path, 'must be an ISO-8601 string');
+    throw ActentValidationException(path, 'must be an ISO-8601 string');
   }
   return date.toUtc();
 }
 
 List<String> _stringList(Object? value, String path) {
   if (value is! List || value.any((item) => item is! String || item.isEmpty)) {
-    throw PigeonValidationException(
+    throw ActentValidationException(
       path,
       'must be an array of non-empty strings',
     );

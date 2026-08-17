@@ -1,4 +1,4 @@
-import '../pigeon_core/pigeon_models.dart';
+import '../actent_core/actent_models.dart';
 import 'work_runner.dart';
 
 class WebJsWorkConfig {
@@ -19,7 +19,7 @@ class WebJsWorkRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async => const WorkRunResult.failure(errorCode: 'web_only_work');

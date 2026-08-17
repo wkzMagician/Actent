@@ -1,9 +1,9 @@
 import 'package:flutter/services.dart';
 
-import '../pigeon_core/pigeon_models.dart';
+import '../actent_core/actent_models.dart';
 import '../work/android/android_work_runner.dart';
 
-const _channelName = 'pengion/android_share';
+const _channelName = 'actent/android_share';
 
 class AndroidShareBridge {
   AndroidShareBridge({EventChannel? events, MethodChannel? methods})
@@ -13,10 +13,10 @@ class AndroidShareBridge {
   final EventChannel _events;
   final MethodChannel _methods;
 
-  Stream<PigeonMessage> get messages =>
-      _events.receiveBroadcastStream().map(PigeonMessage.fromJson);
+  Stream<ActentMessage> get messages =>
+      _events.receiveBroadcastStream().map(ActentMessage.fromJson);
 
-  Future<String> createContentUri(PigeonAttachment attachment) async {
+  Future<String> createContentUri(ActentAttachment attachment) async {
     final value = await _methods.invokeMethod<String>(
       'createContentUri',
       <String, Object?>{'handle': attachment.handle},
@@ -40,7 +40,7 @@ class _AndroidBridgeUriProvider implements AndroidContentUriProvider {
   final AndroidShareBridge bridge;
 
   @override
-  Future<String> uriFor(PigeonAttachment attachment) =>
+  Future<String> uriFor(ActentAttachment attachment) =>
       bridge.createContentUri(attachment);
 }
 

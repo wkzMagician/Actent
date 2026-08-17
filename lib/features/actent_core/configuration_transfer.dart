@@ -1,12 +1,12 @@
-import 'pigeon_models.dart';
-import 'pigeon_store.dart';
+import 'actent_models.dart';
+import 'actent_store.dart';
 
 const _configurationVersion = 1;
 
-class PigeonConfigurationTransfer {
-  const PigeonConfigurationTransfer(this.repository);
+class ActentConfigurationTransfer {
+  const ActentConfigurationTransfer(this.repository);
 
-  final PigeonRepository repository;
+  final ActentRepository repository;
 
   Future<Map<String, Object?>> export() async => <String, Object?>{
     'version': _configurationVersion,
@@ -21,14 +21,14 @@ class PigeonConfigurationTransfer {
 
   Future<void> import(Object? value) async {
     if (value is! Map) {
-      throw const PigeonValidationException(
+      throw const ActentValidationException(
         'configuration',
         'must be an object',
       );
     }
     final json = Map<String, Object?>.from(value);
     if (json['version'] != _configurationVersion) {
-      throw PigeonValidationException(
+      throw ActentValidationException(
         'configuration.version',
         'unsupported version ${json['version']}',
       );
@@ -58,7 +58,7 @@ class PigeonConfigurationTransfer {
 
 List<Map<String, Object?>> _documents(Object? value, String field) {
   if (value is! List || value.any((item) => item is! Map)) {
-    throw PigeonValidationException(field, 'must be an array of objects');
+    throw ActentValidationException(field, 'must be an array of objects');
   }
   return [for (final item in value) Map<String, Object?>.from(item as Map)];
 }

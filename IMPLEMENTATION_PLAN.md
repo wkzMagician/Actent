@@ -1,11 +1,11 @@
-# Pigeon 实现计划
+# Actent 实现计划
 
 ## 1. 目标与边界
 
-Pigeon 是跨设备的可编程内容路由器。下面是一个使用用例
+Actent 是跨设备的可编程内容路由器。下面是一个使用用例
 
 ```text
-Share 到 Pigeon → 选择 Work → 本机执行或加密发送至远端
+Share 到 Actent → 选择 Work → 本机执行或加密发送至远端
 → 远端执行/保存 → WorkReceipt 返回 → 手机上的 Share Work 转发
 ```
 
@@ -16,31 +16,31 @@ Share 到 Pigeon → 选择 Work → 本机执行或加密发送至远端
 
 ### 2.1 Dartloom 新包
 
-创建两个 Dartloom 包。它们是通用能力，不含 Pigeon 的 `Work`、
-`PigeonMessage`、Inbox 或 UI 领域逻辑。
+创建两个 Dartloom 包。它们是通用能力，不含 Actent 的 `Work`、
+`ActentMessage`、Inbox 或 UI 领域逻辑。
 
 | 包 | 职责 | 不负责 |
 | --- | --- | --- |
-| `dartloom_messaging` | 设备间 Packet、LAN/ntfy 连接、加密、重试、去重、附件分块与重组 | Pigeon 协议种类、Work、脚本、Inbox |
+| `dartloom_messaging` | 设备间 Packet、LAN/ntfy 连接、加密、重试、去重、附件分块与重组 | Actent 协议种类、Work、脚本、Inbox |
 | `dartloom_pairing` | 设备身份、临时邀请、QR 展示/扫描、复制/粘贴邀请码、双向确认、LAN 配对发现 | 业务消息投递、Work Catalog |
 
 `dartloom_messaging` 是一个发布包，内部可按 `core`、`ntfy`、`lan` 模块
-组织，但不拆成多个独立发布包。Pigeon 通过 Dartloom capability 使用它：
+组织，但不拆成多个独立发布包。Actent 通过 Dartloom capability 使用它：
 `messaging.default`。`dartloom_pairing` 同样提供独立 capability/契约。
 
 二维码第三方依赖封装在 `dartloom_pairing`：显示使用 `qr_flutter`，Android
 扫码使用 `mobile_scanner`。Windows/Linux 不要求摄像头扫码，使用显示 QR 或
-粘贴邀请码。Pigeon 只处理配对结果，不直接依赖这两个库。
+粘贴邀请码。Actent 只处理配对结果，不直接依赖这两个库。
 
-### 2.2 Pigeon 代码边界
+### 2.2 Actent 代码边界
 
 ```text
-lib/features/pigeon_core/       领域模型、Schema、状态库、路由、队列、Work 服务
+lib/features/actent_core/       领域模型、Schema、状态库、路由、队列、Work 服务
 lib/features/work/              WorkRunner 契约和共用执行调度
 lib/features/work/desktop/      DesktopScriptRunner
 lib/features/work/android/      Android Intent/Share/HTTP Runner
 lib/features/work/ios/          未来 iOS Runner（第一版仅接口/占位，不注册）
-lib/features/pigeon_platform/   Android Share 输入、FileProvider、各平台胶水
+lib/features/actent_platform/   Android Share 输入、FileProvider、各平台胶水
 lib/app/                        Dartloom 工厂注册、页面与依赖组合
 ```
 
@@ -60,12 +60,12 @@ lib/app/                        Dartloom 工厂注册、页面与依赖组合
 
 消息和附件平时以正常文件形式保存在应用私有数据目录；**不做额外静态加密**。
 仅在实际跨设备发送时，`dartloom_messaging` 加密 Packet 与附件。接收端解密后
-再写入自己的普通 Pigeon 存储。
+再写入自己的普通 Actent 存储。
 
 建议目录：
 
 ```text
-pigeon/
+actent/
   settings.json
   devices/<device-id>.json
   works/<work-id>.json
@@ -82,14 +82,14 @@ pigeon/
 设备或配对配置。导出/导入 Work 与设备 endpoint 配置时，不导出私钥、token、
 secret 或历史；重装是新设备，必须重新配对。
 
-### 4.2 PigeonMessage
+### 4.2 ActentMessage
 
 定义并发布版本化 JSON Schema（首版 `schemaVersion: 1`）。每次不兼容变化
-递增版本。一个系统 Share 产生一个 `PigeonMessage`：一个主内容和零个或多个
+递增版本。一个系统 Share 产生一个 `ActentMessage`：一个主内容和零个或多个
 附件。
 
 ```text
-PigeonMessage
+ActentMessage
   id, traceId, schemaVersion, createdAt
   source { kind, deviceId?, appName?, platform? }
   content { type: text | url | image | file | json, ... }
@@ -102,7 +102,7 @@ PigeonMessage
 绝不暴露原始文件路径。
 
 所有接收 Packet 先由 Dartloom 校验版本、接收者、认证标签与 Packet ID，解密后
-再由 Pigeon 按 JSON Schema 校验。任何失败均不进入 Inbox、队列或脚本。
+再由 Actent 按 JSON Schema 校验。任何失败均不进入 Inbox、队列或脚本。
 
 ## 5. 设备身份与配对
 
@@ -117,7 +117,7 @@ Settings 中。
    直连，执行临时密钥握手；双方展示相同短验证码，双方确认后才成为已配对设备。
    mDNS 仅提供位置，不是信任依据。
 2. **QR/粘贴 relay 回退**：任意设备可创建一次性邀请，同时显示 QR 和可复制的
-   `pigeon://pair/v1/...` 字符串。另一设备可扫码或粘贴，适用于两台电脑、两台
+   `actent://pair/v1/...` 字符串。另一设备可扫码或粘贴，适用于两台电脑、两台
    手机及无摄像头设备。邀请默认有效 10 分钟，含版本、临时 nonce、发起方公钥、
    relay URL 与临时 topic；不含长期私钥或密码。创建方确认加入方设备名与短指纹。
 
@@ -132,13 +132,13 @@ Settings 中。
 
 ### 6.1 契约
 
-`dartloom_messaging` 对 Pigeon 暴露通用、不理解业务的加密 Packet：
+`dartloom_messaging` 对 Actent 暴露通用、不理解业务的加密 Packet：
 
 ```text
 Packet { packetId, recipientId, ciphertext, createdAt }
 ```
 
-Pigeon 在密文内部定义 `workRequest`、`workReceipt`、`catalogSnapshot`、
+Actent 在密文内部定义 `workRequest`、`workReceipt`、`catalogSnapshot`、
 `catalogDelta` 等协议内容。Adapter 永远只接触 Packet。
 
 实现：
@@ -149,7 +149,7 @@ Pigeon 在密文内部定义 `workRequest`、`workReceipt`、`catalogSnapshot`�
 - 路由：LAN 优先，3 秒连接/发送窗口失败立即转 ntfy。
 
 每条消息使用一次性会话材料，采用既定的 X25519 + HKDF-SHA-256 + AES-256-GCM
-端到端加密。Dartloom 管理密钥、加密、解密与通用 `SeenPacketStore`；Pigeon 不
+端到端加密。Dartloom 管理密钥、加密、解密与通用 `SeenPacketStore`；Actent 不
 维护协议去重清单。
 
 ### 6.2 失败、重试与去重
@@ -173,7 +173,7 @@ Work 请求默认 24 小时过期，Work 可覆盖；过期请求回传 `expired
 
 ## 7. Work 通用抽象
 
-`Work` 是 Pigeon Core 的通用领域实体，而不是某个平台的模型。通用字段包括：
+`Work` 是 Actent Core 的通用领域实体，而不是某个平台的模型。通用字段包括：
 
 ```text
 id, revision, name, ownerDeviceId, allowedSourceDeviceIds
@@ -217,7 +217,7 @@ Null 是唯一跨平台的无执行器例外。它可作为任何设备的目标
 与通用可执行文件为内置模板。保存时验证可执行文件存在，但绝不自动安装运行时或
 依赖。
 
-协议固定：向 stdin 写入一个 UTF-8、版本化 `PigeonMessage` JSON 文档后关闭 stdin；
+协议固定：向 stdin 写入一个 UTF-8、版本化 `ActentMessage` JSON 文档后关闭 stdin；
 退出码 0 成功，非 0 失败。stdout 始终读取以免阻塞但丢弃；stderr 仅保留最多 8 KB
 本地失败摘要。环境变量仅注入子进程，不改系统环境；普通值存配置，secret 值存
 Secure Settings。
@@ -246,8 +246,8 @@ HTTP Work 支持 URL、方法、headers、JSON body 模板、timeout、Secure Se
 secret 引用；仅回传 HTTP 状态和安全摘要。模板只允许安全占位符，不运行 Dart/JS
 表达式。
 
-本机点击手机 Work 时立即执行。远端手机的请求在 Pigeon 前台可立即尝试执行；应用
-后台时不常驻连接、不开 FCM，下一次打开 Pigeon 后再执行。Android 后台 Activity
+本机点击手机 Work 时立即执行。远端手机的请求在 Actent 前台可立即尝试执行；应用
+后台时不常驻连接、不开 FCM，下一次打开 Actent 后再执行。Android 后台 Activity
 启动受系统限制，因此 Intent 回执只能是 `launch_attempted`，绝不声称目标 App
 业务完成。
 
@@ -255,15 +255,15 @@ secret 引用；仅回传 HTTP 状态和安全摘要。模板只允许安全占�
 
 页面：Inbox（主页面）、Works、Devices、Settings。
 
-Android Share 输入由 Pigeon 自己在 Manifest 声明 `ACTION_SEND` 与
-`ACTION_SEND_MULTIPLE`。收到 `content://` 附件后，先复制到 Pigeon 私有附件目录，
+Android Share 输入由 Actent 自己在 Manifest 声明 `ACTION_SEND` 与
+`ACTION_SEND_MULTIPLE`。收到 `content://` 附件后，先复制到 Actent 私有附件目录，
 再创建消息；不得长期保存来源应用的 URI。Text/URL/Image/JSON 映射相应内容类型，
 未知 MIME 一律作为 File，保留名称与 MIME。
 
 一次 Share 创建草稿并打开 Work Picker：选择本机 Work 直接执行，选择远端 Work
 发送请求，选择 Null Work 则按其目标仅保存；取消 Picker 时丢弃草稿。Work 状态显示
 在原 Inbox 消息下，并按既定规则自动回传给发起设备。手机后台期间收到的状态在下次
-打开 Pigeon 时显示。
+打开 Actent 时显示。
 
 Share Work 是手机的普通 Intent Work；其 `chooser: true` 模板把原内容和全部附件
 交给 Android 系统分享面板。桌面第一版不提供系统 Share Work，桌面有副作用 Work
@@ -280,12 +280,12 @@ Share Work 是手机的普通 Intent Work；其 `chooser: true` 模板把原内�
 2. 在 Dartloom 上游创建 `dartloom_messaging` 与 `dartloom_pairing` 的 package skeleton、
    capability contracts 与 fake 实现。
 3. 为 Packet、连接策略、去重、配对邀请、确认状态定义 Schema/API；先编写包级测试。
-4. 实现 ntfy、LAN、crypto、chunk、QR、Android scanner 适配；保持 Pigeon 领域无依赖。
-5. 更新 Dartloom 配置/生成器以注册 `messaging.default`、`pairing.default`，从 Pigeon 执行生成升级，绝不手改 `lib/capabilities/`。
+4. 实现 ntfy、LAN、crypto、chunk、QR、Android scanner 适配；保持 Actent 领域无依赖。
+5. 更新 Dartloom 配置/生成器以注册 `messaging.default`、`pairing.default`，从 Actent 执行生成升级，绝不手改 `lib/capabilities/`。
 
-### Phase 1 — Pigeon Core
+### Phase 1 — Actent Core
 
-1. 定义 PigeonMessage、Device、Work、WorkRequest、WorkReceipt 和 JSON Schema。
+1. 定义 ActentMessage、Device、Work、WorkRequest、WorkReceipt 和 JSON Schema。
 2. 为状态库、Schema 校验、Catalog revision、授权、消息删除/附件清理写单元测试。
 3. 实现 JSON-per-entity Repository 和 Secure Settings secret repository。
 4. 定义 `WorkRunner`、队列、取消、恢复与结果路由；用 fake runner 完成测试。
@@ -305,7 +305,7 @@ Share Work 是手机的普通 Intent Work；其 `chooser: true` 模板把原内�
 1. 测试 LAN 临时发现/确认、QR/粘贴邀请、到期、错误的短验证码与取消配对。
 2. 接入 `dartloom_pairing`，实现 Devices UI。
 3. Android 原生集成测试 Share 接收、附件私有化、FileProvider、Intent chooser；再实现
-   Pigeon 输入 Activity 与 Work Picker。
+   Actent 输入 Activity 与 Work Picker。
 4. 实现 Inbox、Works、Devices、Settings；桌面可编辑 Work，手机只读远端 Work Catalog。
 
 ### Phase 4 — 端到端验收与稳定性
@@ -322,7 +322,7 @@ Share Work 是手机的普通 Intent Work；其 `chooser: true` 模板把原内�
 
 ```text
 Android 阅读 App Share
-  → Pigeon 生成 PigeonMessage 并选择远端 Script Work
+  → Actent 生成 ActentMessage 并选择远端 Script Work
   → LAN 直连优先、ntfy 回退的端到端加密投递
   → 桌面持久化、排队并执行用户脚本
   → 手机收到 WorkReceipt（成功、失败、stored、expired 等）

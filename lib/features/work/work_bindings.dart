@@ -1,7 +1,7 @@
 import 'android/android_work_runner.dart';
 import 'desktop/desktop_script_runner.dart';
 import 'web_js_work.dart';
-import '../pigeon_core/pigeon_models.dart';
+import '../actent_core/actent_models.dart';
 
 class WorkBindingException implements Exception {
   const WorkBindingException(this.message);

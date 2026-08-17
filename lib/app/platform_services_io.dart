@@ -11,7 +11,7 @@ Future<ResidentService?> createResidentService() async {
     return null;
   }
   final service = TrayResidentService(
-    tooltip: 'Pengion',
+    tooltip: 'Actent',
     linuxIconPath: 'linux/runner/resources/app_icon.png',
     macosIconPath:
         'macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png',
@@ -38,5 +38,5 @@ SingleInstanceService? createSingleInstanceService() {
       defaultTargetPlatform != TargetPlatform.linux) {
     return null;
   }
-  return SocketSingleInstanceService(identity: 'com.example.pengion');
+  return SocketSingleInstanceService(identity: 'com.example.actent');
 }

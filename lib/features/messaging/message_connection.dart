@@ -1,5 +1,5 @@
-// Pigeon uses the generic Dartloom messaging capability through this
-// application-owned import boundary. No Pigeon protocol types live in the
+// Actent uses the generic Dartloom messaging capability through this
+// application-owned import boundary. No Actent protocol types live in the
 // capability transport implementation.
 export 'package:dartloom_messaging/packet_transport.dart'
     show

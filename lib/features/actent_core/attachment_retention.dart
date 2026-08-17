@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'pigeon_store.dart';
+import 'actent_store.dart';
 import 'secret_repository.dart';
 
 enum AttachmentRetention { oneDay, sevenDays, oneMonth, forever }
@@ -8,7 +8,7 @@ enum AttachmentRetention { oneDay, sevenDays, oneMonth, forever }
 class AttachmentRetentionPreferences {
   const AttachmentRetentionPreferences(this.secrets);
 
-  final PigeonSecretRepository secrets;
+  final ActentSecretRepository secrets;
 
   Future<AttachmentRetention> load() async {
     final value = await secrets.read('retention.attachments');
@@ -25,7 +25,7 @@ class AttachmentRetentionPreferences {
 class PacketDedupRetentionPreferences {
   const PacketDedupRetentionPreferences(this.secrets);
 
-  final PigeonSecretRepository secrets;
+  final ActentSecretRepository secrets;
 
   Future<Duration> load() async {
     final days = int.tryParse(
@@ -49,7 +49,7 @@ extension AttachmentRetentionDuration on AttachmentRetention {
   };
 }
 
-/// Deletes only Pigeon-owned attachment files and only after their message
+/// Deletes only Actent-owned attachment files and only after their message
 /// reference has disappeared. Handles outside [root] are ignored.
 class AttachmentRetentionManager {
   AttachmentRetentionManager({
@@ -58,7 +58,7 @@ class AttachmentRetentionManager {
     this.clock = _now,
   });
 
-  final PigeonRepository repository;
+  final ActentRepository repository;
   final Directory root;
   final DateTime Function() clock;
 

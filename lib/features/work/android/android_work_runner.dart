@@ -1,6 +1,6 @@
 import 'package:http/http.dart' as http;
 
-import '../../pigeon_core/pigeon_models.dart';
+import '../../actent_core/actent_models.dart';
 import '../work_runner.dart';
 
 enum AndroidAttachmentPlacement { none, stream, streams }
@@ -73,7 +73,7 @@ class AndroidIntentRequest {
 }
 
 abstract interface class AndroidContentUriProvider {
-  Future<String> uriFor(PigeonAttachment attachment);
+  Future<String> uriFor(ActentAttachment attachment);
 }
 
 class AndroidIntentMapper {
@@ -82,7 +82,7 @@ class AndroidIntentMapper {
   final AndroidContentUriProvider uriProvider;
 
   Future<AndroidIntentRequest> map(
-    PigeonMessage message,
+    ActentMessage message,
     AndroidIntentSpec spec,
   ) async {
     final uris = <String>[];
@@ -192,7 +192,7 @@ class AndroidIntentRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async {
@@ -299,7 +299,7 @@ class AndroidHttpRunner implements WorkRunner {
   @override
   Future<WorkRunResult> run(
     Work work,
-    PigeonMessage message, {
+    ActentMessage message, {
     required String requestId,
     required CancellationToken cancellation,
   }) async {
@@ -384,6 +384,6 @@ class AndroidShareWork {
 
 class MemoryAndroidUriProvider implements AndroidContentUriProvider {
   @override
-  Future<String> uriFor(PigeonAttachment attachment) async =>
-      'content://pengion/${Uri.encodeComponent(attachment.id)}';
+  Future<String> uriFor(ActentAttachment attachment) async =>
+      'content://actent/${Uri.encodeComponent(attachment.id)}';
 }

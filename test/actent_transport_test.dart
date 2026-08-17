@@ -3,21 +3,21 @@ import 'dart:io';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:pengion/features/messaging/attachment_chunks.dart';
-import 'package:pengion/features/messaging/message_connection.dart';
-import 'package:pengion/features/messaging/messaging_packet.dart';
-import 'package:pengion/features/messaging/packet_crypto.dart';
-import 'package:pengion/features/pigeon_core/pigeon_models.dart';
-import 'package:pengion/features/pigeon_core/pigeon_store.dart';
-import 'package:pengion/features/pigeon_core/pigeon_router.dart';
-import 'package:pengion/features/pigeon_core/pigeon_transport.dart';
-import 'package:pengion/features/work/work_runner.dart';
+import 'package:actent/features/messaging/attachment_chunks.dart';
+import 'package:actent/features/messaging/message_connection.dart';
+import 'package:actent/features/messaging/messaging_packet.dart';
+import 'package:actent/features/messaging/packet_crypto.dart';
+import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/actent_core/actent_store.dart';
+import 'package:actent/features/actent_core/actent_router.dart';
+import 'package:actent/features/actent_core/actent_transport.dart';
+import 'package:actent/features/work/work_runner.dart';
 
 void main() {
   test('encrypts a routed payload and falls back from LAN to relay', () async {
     final local = await PacketIdentity.generate();
     final remote = await PacketIdentity.generate();
-    final repository = PigeonRepository(MemoryPigeonJsonStore());
+    final repository = ActentRepository(MemoryActentJsonStore());
     final remoteId = 'remote-device';
     await repository.saveDevice(
       Device(
@@ -32,11 +32,11 @@ void main() {
       ),
     );
     final publisher = _CapturePublisher();
-    final service = PigeonTransportService(
+    final service = ActentTransportService(
       deviceId: 'local-device',
       identity: local,
       repository: repository,
-      relay: PigeonRelaySettings(
+      relay: ActentRelaySettings(
         server: Uri.parse('https://relay.example'),
         topic: 'local-topic',
       ),
@@ -47,7 +47,7 @@ void main() {
       recipientId: remoteId,
       payload: const <String, Object?>{
         'type': 'workRequest',
-        'schemaVersion': pigeonSchemaVersion,
+        'schemaVersion': actentSchemaVersion,
       },
     );
 
@@ -60,37 +60,37 @@ void main() {
     );
     expect(jsonDecode(utf8.decode(plaintext)), {
       'type': 'workRequest',
-      'schemaVersion': pigeonSchemaVersion,
+      'schemaVersion': actentSchemaVersion,
     });
   });
 
   test(
     'rejects an authenticated packet whose request source is forged',
     () async {
-      final repository = PigeonRepository(MemoryPigeonJsonStore());
+      final repository = ActentRepository(MemoryActentJsonStore());
       final work = Work(
         id: 'work',
         revision: 1,
         name: 'Work',
         ownerDeviceId: 'target',
-        acceptedContentTypes: const {PigeonContentType.text},
+        acceptedContentTypes: const {ActentContentType.text},
       );
       await repository.saveWork(work);
       final queue = WorkQueueCoordinator(repository: repository)
         ..register(work.id, const NullWorkRunner());
-      final router = PigeonRouter(
+      final router = ActentRouter(
         deviceId: 'target',
         repository: repository,
         connection: FakeMessageConnection(),
         queue: queue,
       );
-      final message = PigeonMessage(
+      final message = ActentMessage(
         id: 'message',
         traceId: 'trace',
         createdAt: DateTime.now().toUtc(),
-        source: const PigeonSource(kind: 'test'),
-        content: PigeonContent(
-          type: PigeonContentType.text,
+        source: const ActentSource(kind: 'test'),
+        content: ActentContent(
+          type: ActentContentType.text,
           data: const {'text': 'hello'},
         ),
       );
@@ -107,10 +107,10 @@ void main() {
       expect(
         () => router.receive({
           'type': 'workRequest',
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'request': request.toJson(),
         }, authenticatedSenderId: 'actual-source'),
-        throwsA(isA<PigeonValidationException>()),
+        throwsA(isA<ActentValidationException>()),
       );
     },
   );
@@ -118,7 +118,7 @@ void main() {
   test(
     'packages private attachments as authenticated manifest chunks',
     () async {
-      final root = await Directory.systemTemp.createTemp('pigeon-transport-');
+      final root = await Directory.systemTemp.createTemp('actent-transport-');
       addTearDown(() => root.delete(recursive: true));
       final attachmentDirectory = Directory('${root.path}/message/attachment')
         ..createSync(recursive: true);
@@ -126,7 +126,7 @@ void main() {
         ..writeAsBytesSync(utf8.encode('private attachment'));
       final local = await PacketIdentity.generate();
       final remote = await PacketIdentity.generate();
-      final repository = PigeonRepository(MemoryPigeonJsonStore());
+      final repository = ActentRepository(MemoryActentJsonStore());
       await repository.saveDevice(
         Device(
           id: 'remote',
@@ -140,28 +140,28 @@ void main() {
         ),
       );
       final publisher = _CapturePublisher();
-      final service = PigeonTransportService(
+      final service = ActentTransportService(
         deviceId: 'local',
         identity: local,
         repository: repository,
-        relay: PigeonRelaySettings(
+        relay: ActentRelaySettings(
           server: Uri.parse('https://relay.example'),
           topic: 'local-topic',
         ),
         attachmentRoot: root,
         relayPublisherFor: (_) => publisher,
       );
-      final message = PigeonMessage(
+      final message = ActentMessage(
         id: 'message',
         traceId: 'trace',
         createdAt: DateTime.now().toUtc(),
-        source: const PigeonSource(kind: 'test'),
-        content: PigeonContent(
-          type: PigeonContentType.file,
+        source: const ActentSource(kind: 'test'),
+        content: ActentContent(
+          type: ActentContentType.file,
           data: const {'name': 'payload'},
         ),
         attachments: [
-          PigeonAttachment(
+          ActentAttachment(
             id: 'attachment',
             name: 'payload',
             mimeType: 'text/plain',
@@ -184,7 +184,7 @@ void main() {
         recipientId: 'remote',
         payload: {
           'type': 'workRequest',
-          'schemaVersion': pigeonSchemaVersion,
+          'schemaVersion': actentSchemaVersion,
           'request': request.toJson(),
         },
       );
@@ -220,7 +220,7 @@ void main() {
       final decodedAttachment = Map<String, Object?>.from(
         (decodedMessage['attachments'] as List).single as Map,
       );
-      expect(decodedAttachment['handle'], startsWith('pigeon-transfer://'));
+      expect(decodedAttachment['handle'], startsWith('actent-transfer://'));
     },
   );
 }
