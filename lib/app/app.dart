@@ -126,7 +126,9 @@ class _DartloomAppState extends State<DartloomApp> {
       desktopSecrets: widget.desktopSecrets,
       showPairingQr: (context, invite) =>
           FlutterQrCodePresenter(context).show(invite),
-      scanPairingQr: defaultTargetPlatform == TargetPlatform.android
+      scanPairingQr:
+          defaultTargetPlatform == TargetPlatform.android ||
+              defaultTargetPlatform == TargetPlatform.iOS
           ? (context) => MobileScannerQrScanner(context).scan()
           : null,
     ),
