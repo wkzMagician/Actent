@@ -14,11 +14,9 @@ This project is managed by Dartloom.
 <!-- dartloom:begin -->
 ## Dartloom packages
 
-Selected platforms: Android, iOS, Windows, macOS, Linux, Web
+Selected platforms: Android, Ios, Windows, Macos, Linux, Web
 
-Selected Dartloom contracts and implementations are direct dependencies in
-`pubspec.yaml`. Platform-specific implementations are selected through
-conditional application composition in `lib/app`.
+No optional Dartloom packages are selected.
 <!-- dartloom:end -->
 
 ## Capability platform support
