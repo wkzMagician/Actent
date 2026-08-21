@@ -15,7 +15,11 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ActentOpenFiles")
+    guard let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "ActentOpenFiles"
+    ) else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "actent/open_files",
       binaryMessenger: registrar.messenger()
