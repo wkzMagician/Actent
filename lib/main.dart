@@ -4,6 +4,7 @@ import 'package:dartloom_resident/dartloom_resident.dart';
 import 'package:dartloom_singleton/dartloom_singleton.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:dartloom_storage/dartloom_storage.dart';
 import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
 import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_preferences.dart';
@@ -15,6 +16,7 @@ import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
 import 'app/pairing_configuration.dart';
+import 'features/actent_platform/work_input_file_picker.dart';
 import 'features/actent_core/attachment_retention.dart';
 import 'features/actent_core/device_identity.dart';
 import 'features/actent_core/actent_models.dart';
@@ -27,9 +29,9 @@ import 'features/actent_platform/android_share_bridge.dart';
 import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
-void main() {
+void main([List<String> arguments = const []]) {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const _StartupGate());
+  runApp(_StartupGate(initialFilePaths: arguments));
 }
 
 const _startupTimeout = Duration(seconds: 30);
@@ -71,8 +73,20 @@ Future<void> _disposeStartupResources({
   }
 }
 
-Future<DartloomApp> _createApplication() async {
+Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
   final singleInstance = createSingleInstanceService();
+  final externalFilePaths = StreamController<List<String>>.broadcast();
+  if (defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.iOS) {
+    const openFilesChannel = MethodChannel('actent/open_files');
+    openFilesChannel.setMethodCallHandler((call) async {
+      if (call.method != 'openFiles') return;
+      final values = call.arguments;
+      if (values is List) {
+        externalFilePaths.add(values.whereType<String>().toList());
+      }
+    });
+  }
   ObjectStore? objectStore;
   ActentTransportService? transport;
   ResidentService? resident;
@@ -107,10 +121,12 @@ Future<DartloomApp> _createApplication() async {
       ActentRelaySettings.load(secretRepository),
       'loading relay settings',
     );
-    final attachmentRoot = await _startupStep(
-      resolveActentAttachmentDirectory(),
-      'preparing attachments',
-    );
+    final attachmentRoot = kIsWeb
+        ? null
+        : await _startupStep(
+            resolveActentAttachmentDirectory(),
+            'preparing attachments',
+          );
     final lanServerConfig = await _startupStep(
       ActentLanServerConfig.fromEnvironment(),
       'preparing LAN settings',
@@ -136,6 +152,20 @@ Future<DartloomApp> _createApplication() async {
       attachmentRoot: attachmentRoot,
       seenPacketRetention: packetDedupRetention,
       lanServerConfig: lanServerConfig,
+      readAttachment: kIsWeb
+          ? (handle) async {
+              const prefix = 'actent-indexeddb://';
+              if (!handle.startsWith(prefix)) return null;
+              return openedObjectStore.read(handle.substring(prefix.length));
+            }
+          : null,
+      writeAttachment: kIsWeb
+          ? (messageId, attachmentId, bytes) async {
+              final key = 'attachments/$messageId/$attachmentId';
+              await openedObjectStore.write(key, Uint8List.fromList(bytes));
+              return 'actent-indexeddb://$key';
+            }
+          : null,
     );
     final router = ActentRouter(
       deviceId: identity.deviceId,
@@ -198,20 +228,54 @@ Future<DartloomApp> _createApplication() async {
         server: relay.server,
         authorization: relay.authorization,
       ),
-      attachmentRetention: AttachmentRetentionManager(
-        repository: repository,
-        root: attachmentRoot,
-      ),
+      attachmentRetention: attachmentRoot == null
+          ? null
+          : AttachmentRetentionManager(
+              repository: repository,
+              root: attachmentRoot,
+            ),
       initialAttachmentRetention: attachmentRetention,
       onAttachmentRetentionChanged: retentionPreferences.save,
       initialPacketDedupRetention: packetDedupRetention,
       onPacketDedupRetentionChanged: dedupPreferences.save,
       router: router,
       queue: queue,
+      pickWorkInputFile: switch (defaultTargetPlatform) {
+        TargetPlatform.android ||
+        TargetPlatform.iOS ||
+        TargetPlatform.windows ||
+        TargetPlatform.linux ||
+        TargetPlatform.macOS => () => pickLocalWorkInputFile(
+          attachmentDirectory: attachmentRoot!.path,
+          deviceId: identity.deviceId,
+        ),
+        _ when kIsWeb => () => pickLocalWorkInputFile(
+          attachmentStore: openedObjectStore,
+          deviceId: identity.deviceId,
+        ),
+        _ => null,
+      },
+      importWorkInputFiles: switch (defaultTargetPlatform) {
+        TargetPlatform.windows ||
+        TargetPlatform.linux ||
+        TargetPlatform.macOS => (paths) => importLocalWorkInputFiles(
+          paths: paths,
+          attachmentDirectory: attachmentRoot!.path,
+          deviceId: identity.deviceId,
+        ),
+        _ => null,
+      },
+      initialFilePaths: initialFilePaths,
+      externalFilePaths: externalFilePaths.stream,
       desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
       shareBridge: defaultTargetPlatform == TargetPlatform.android
           ? AndroidShareBridge()
           : null,
+    );
+    await singleInstance?.configure(
+      SingleInstanceConfiguration(
+        onArgs: (args) async => externalFilePaths.add(args),
+      ),
     );
     // Resident/tray setup is optional. Do not hold the first Flutter frame on
     // a platform plugin; a tray failure must not make the app look blank.
@@ -227,6 +291,7 @@ Future<DartloomApp> _createApplication() async {
             // Exit must remain responsive even if a network subscription is slow.
           }
           await singleInstance?.dispose();
+          await externalFilePaths.close();
           await resident?.dispose();
           await activeObjectStore.close();
           return true;
@@ -238,6 +303,7 @@ Future<DartloomApp> _createApplication() async {
     );
     return application;
   } on Object {
+    await externalFilePaths.close();
     await _disposeStartupResources(
       singleInstance: singleInstance,
       transport: transport,
@@ -257,7 +323,9 @@ Locale? _localeFromCode(String? code) {
 }
 
 class _StartupGate extends StatefulWidget {
-  const _StartupGate();
+  const _StartupGate({this.initialFilePaths = const []});
+
+  final List<String> initialFilePaths;
 
   @override
   State<_StartupGate> createState() => _StartupGateState();
@@ -269,7 +337,7 @@ class _StartupGateState extends State<_StartupGate> {
   @override
   void initState() {
     super.initState();
-    _application = _createApplication();
+    _application = _createApplication(widget.initialFilePaths);
   }
 
   @override

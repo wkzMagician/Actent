@@ -25,3 +25,10 @@ packages:
   - dartloom_singleton_socket
   - dartloom_messaging
   - dartloom_pairing
+
+build:
+  ios:
+    post_build:
+      - tool/build_ios_native_targets.sh
+    native_targets:
+      - ActentShareExtension

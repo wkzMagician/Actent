@@ -39,7 +39,7 @@ jobs:
         if: ${{ matrix.platform == 'linux' }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libayatana-appindicator3-dev zip
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev zip
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'
@@ -55,6 +55,17 @@ jobs:
             ios) flutter build ios --${{ inputs.mode }} --no-codesign ;;
             *) flutter build ${{ matrix.platform }} --${{ inputs.mode }} ;;
           esac
+      - name: Run project post-build hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "${{ matrix.platform }}" in
+            ios)
+              DARTLOOM_BUILD_MODE='${{ inputs.mode }}' DARTLOOM_NATIVE_TARGETS='ActentShareExtension' bash 'tool/build_ios_native_targets.sh' '${{ inputs.mode }}'
+              ;;
+            *) ;;
+          esac
+
       - name: Package artifact
         shell: bash
         run: |
@@ -74,13 +85,38 @@ jobs:
               ;;
             macos)
               app_path=$(find "build/macos/Build/Products" -maxdepth 2 -name '*.app' -type d | head -n 1)
-              ditto -c -k --keepParent "$app_path" "artifact/${app}-macos.zip"
+              hdiutil create -volname "$app" -srcfolder "$app_path" -ov -format UDZO "artifact/${app}-macos.dmg"
               ;;
             windows)
-              powershell -NoProfile -Command '$version = (Select-String -Path pubspec.yaml -Pattern "^version:\s*([0-9]+\.[0-9]+\.[0-9]+)").Matches.Groups[1].Value; if (-not $version) { throw "pubspec.yaml version not found" }; & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" installer\windows.iss'
+              powershell -NoProfile -Command '$version = (Select-String -Path pubspec.yaml -Pattern "^version:\s*([0-9]+\.[0-9]+\.[0-9]+)").Matches.Groups[1].Value; if (-not $version) { throw "pubspec.yaml version not found" }; & (Get-Command ISCC.exe -ErrorAction Stop).Source "/DMyAppVersion=$version" installer\windows.iss; Copy-Item -Path "dist\*.exe" -Destination artifact -Force'
               ;;
             linux)
               tar -czf "artifact/${app}-linux-x64.tar.gz" -C "build/linux/x64/$mode" bundle
+              version=$(sed -n 's/^version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)
+              test -n "$version"
+              package_dir="$(mktemp -d)"
+              mkdir -p "$package_dir/DEBIAN" "$package_dir/opt/$app" "$package_dir/usr/share/applications"
+              cp -R "build/linux/x64/$mode/bundle/." "$package_dir/opt/$app/"
+              cat > "$package_dir/DEBIAN/control" <<EOF
+              Package: $app
+              Version: $version
+              Section: utils
+              Priority: optional
+              Architecture: amd64
+              Maintainer: Dartloom project
+              Description: $app
+              EOF
+              cat > "$package_dir/usr/share/applications/$app.desktop" <<EOF
+              [Desktop Entry]
+              Name=$app
+              Exec=/opt/$app/$app %F
+              Type=Application
+              Terminal=false
+              MimeType=application/octet-stream;
+              Categories=Utility;
+              EOF
+              dpkg-deb --build "$package_dir" "artifact/${app}-linux-x64.deb"
+              rm -rf "$package_dir"
               ;;
             web)
               (cd build/web && zip -qr "../../artifact/${app}-web.zip" .)

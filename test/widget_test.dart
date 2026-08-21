@@ -6,9 +6,9 @@ void main() {
   testWidgets('shows the Actent app shell', (tester) async {
     await tester.pumpWidget(const DartloomApp());
     await tester.pumpAndSettle();
-    expect(find.text('Inbox'), findsNWidgets(2));
+    expect(find.text('Activity'), findsNWidgets(2));
     expect(
-      find.text('Shared content and Work receipts will appear here.'),
+      find.text('Inputs and Work execution history will appear here.'),
       findsOneWidget,
     );
   });

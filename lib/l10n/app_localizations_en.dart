@@ -25,11 +25,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayQuit => 'Quit Actent';
 
   @override
-  String get inbox => 'Inbox';
+  String get activity => 'Activity';
 
   @override
-  String get inboxDescription =>
-      'Shared content and Work receipts will appear here.';
+  String get activityDescription =>
+      'Inputs and Work execution history will appear here.';
 
   @override
   String get works => 'Works';
@@ -77,7 +77,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get attachmentRetentionDescription =>
-      'Default: 7 days. Inbox messages remain until manually deleted.';
+      'Default: 7 days. Activity remains until manually deleted.';
 
   @override
   String get purgeExpiredAttachments => 'Purge expired attachments';
@@ -280,7 +280,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String removePairedDeviceMessage(Object name) {
-    return 'Remove $name and its remote Work catalog? Existing Inbox history is kept.';
+    return 'Remove $name and its remote Work catalog? Existing Activity history is kept.';
   }
 
   @override
@@ -371,4 +371,72 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get invitationLinkCopied => 'Invitation link copied.';
+
+  @override
+  String get runWork => 'Run Work';
+
+  @override
+  String get chooseWorkInput => 'Choose input';
+
+  @override
+  String get chooseWorkInputDescription =>
+      'Choose compatible Activity content to send to this Work.';
+
+  @override
+  String get noMessagesAvailable =>
+      'There is no compatible Activity content to run.';
+
+  @override
+  String workRequestFailed(Object error) {
+    return 'Work request failed: $error';
+  }
+
+  @override
+  String pairingCode(Object code) {
+    return 'Pairing code: $code';
+  }
+
+  @override
+  String get pairingCodeDescription =>
+      'Enter this code on the other device to confirm that both devices are pairing with each other.';
+
+  @override
+  String fileSelectionFailed(Object error) {
+    return 'Could not select file: $error';
+  }
+
+  @override
+  String get chooseInputType => 'Choose input type';
+
+  @override
+  String get chooseInputTypeDescription =>
+      'Select the kind of content to send to this Work.';
+
+  @override
+  String get inputTypeNotAccepted =>
+      'This file type is not accepted by the selected Work.';
+
+  @override
+  String get inputText => 'Text';
+
+  @override
+  String get inputUrl => 'URL';
+
+  @override
+  String get inputImage => 'Image';
+
+  @override
+  String get inputFile => 'File';
+
+  @override
+  String get inputJson => 'JSON';
+
+  @override
+  String get inputValueHint => 'Enter content';
+
+  @override
+  String get urlInputHint => 'https://example.com';
+
+  @override
+  String get continueLabel => 'Continue';
 }

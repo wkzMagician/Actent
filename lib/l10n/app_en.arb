@@ -5,8 +5,8 @@
   "startupPreparing": "Preparing local data and device identity",
   "startupFailed": "Actent failed to start",
   "trayQuit": "Quit Actent",
-  "inbox": "Inbox",
-  "inboxDescription": "Shared content and Work receipts will appear here.",
+  "activity": "Activity",
+  "activityDescription": "Inputs and Work execution history will appear here.",
   "works": "Works",
   "worksDescription": "Create and manage the actions available on this device.",
   "devices": "Devices",
@@ -20,7 +20,7 @@
   "relayServer": "Relay server",
   "authorizationConfigured": "authorization configured",
   "attachmentRetention": "Attachment retention",
-  "attachmentRetentionDescription": "Default: 7 days. Inbox messages remain until manually deleted.",
+  "attachmentRetentionDescription": "Default: 7 days. Activity remains until manually deleted.",
   "purgeExpiredAttachments": "Purge expired attachments",
   "currentRetention": "Current retention: {value}",
   "packetDeduplicationRetention": "Packet deduplication retention",
@@ -81,7 +81,7 @@
   ,"import": "Import"
   ,"importFailedWithError": "Import failed: {error}"
   ,"removePairedDeviceTitle": "Remove paired device?"
-  ,"removePairedDeviceMessage": "Remove {name} and its remote Work catalog? Existing Inbox history is kept."
+  ,"removePairedDeviceMessage": "Remove {name} and its remote Work catalog? Existing Activity history is kept."
   ,"remove": "Remove"
   ,"discoverOnLan": "Discover on LAN"
   ,"pasteInvitation": "Paste invitation"
@@ -108,4 +108,23 @@
   ,"scanPairingQrDescription": "Scan this QR code to pair the device."
   ,"copyInvitationLink": "Copy invitation link"
   ,"invitationLinkCopied": "Invitation link copied."
+  ,"runWork": "Run Work"
+  ,"chooseWorkInput": "Choose input"
+  ,"chooseWorkInputDescription": "Choose compatible Activity content to send to this Work."
+  ,"noMessagesAvailable": "There is no compatible Activity content to run."
+  ,"workRequestFailed": "Work request failed: {error}"
+  ,"pairingCode": "Pairing code: {code}"
+  ,"pairingCodeDescription": "Enter this code on the other device to confirm that both devices are pairing with each other."
+  ,"fileSelectionFailed": "Could not select file: {error}"
+  ,"chooseInputType": "Choose input type"
+  ,"chooseInputTypeDescription": "Select the kind of content to send to this Work."
+  ,"inputTypeNotAccepted": "This file type is not accepted by the selected Work."
+  ,"inputText": "Text"
+  ,"inputUrl": "URL"
+  ,"inputImage": "Image"
+  ,"inputFile": "File"
+  ,"inputJson": "JSON"
+  ,"inputValueHint": "Enter content"
+  ,"urlInputHint": "https://example.com"
+  ,"continueLabel": "Continue"
 }

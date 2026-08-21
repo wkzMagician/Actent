@@ -128,17 +128,17 @@ abstract class AppLocalizations {
   /// **'Quit Actent'**
   String get trayQuit;
 
-  /// No description provided for @inbox.
+  /// No description provided for @activity.
   ///
   /// In en, this message translates to:
-  /// **'Inbox'**
-  String get inbox;
+  /// **'Activity'**
+  String get activity;
 
-  /// No description provided for @inboxDescription.
+  /// No description provided for @activityDescription.
   ///
   /// In en, this message translates to:
-  /// **'Shared content and Work receipts will appear here.'**
-  String get inboxDescription;
+  /// **'Inputs and Work execution history will appear here.'**
+  String get activityDescription;
 
   /// No description provided for @works.
   ///
@@ -221,7 +221,7 @@ abstract class AppLocalizations {
   /// No description provided for @attachmentRetentionDescription.
   ///
   /// In en, this message translates to:
-  /// **'Default: 7 days. Inbox messages remain until manually deleted.'**
+  /// **'Default: 7 days. Activity remains until manually deleted.'**
   String get attachmentRetentionDescription;
 
   /// No description provided for @purgeExpiredAttachments.
@@ -587,7 +587,7 @@ abstract class AppLocalizations {
   /// No description provided for @removePairedDeviceMessage.
   ///
   /// In en, this message translates to:
-  /// **'Remove {name} and its remote Work catalog? Existing Inbox history is kept.'**
+  /// **'Remove {name} and its remote Work catalog? Existing Activity history is kept.'**
   String removePairedDeviceMessage(Object name);
 
   /// No description provided for @remove.
@@ -745,6 +745,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Invitation link copied.'**
   String get invitationLinkCopied;
+
+  /// No description provided for @runWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Run Work'**
+  String get runWork;
+
+  /// No description provided for @chooseWorkInput.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose input'**
+  String get chooseWorkInput;
+
+  /// No description provided for @chooseWorkInputDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose compatible Activity content to send to this Work.'**
+  String get chooseWorkInputDescription;
+
+  /// No description provided for @noMessagesAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no compatible Activity content to run.'**
+  String get noMessagesAvailable;
+
+  /// No description provided for @workRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Work request failed: {error}'**
+  String workRequestFailed(Object error);
+
+  /// No description provided for @pairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing code: {code}'**
+  String pairingCode(Object code);
+
+  /// No description provided for @pairingCodeDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter this code on the other device to confirm that both devices are pairing with each other.'**
+  String get pairingCodeDescription;
+
+  /// No description provided for @fileSelectionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not select file: {error}'**
+  String fileSelectionFailed(Object error);
+
+  /// No description provided for @chooseInputType.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose input type'**
+  String get chooseInputType;
+
+  /// No description provided for @chooseInputTypeDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select the kind of content to send to this Work.'**
+  String get chooseInputTypeDescription;
+
+  /// No description provided for @inputTypeNotAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'This file type is not accepted by the selected Work.'**
+  String get inputTypeNotAccepted;
+
+  /// No description provided for @inputText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text'**
+  String get inputText;
+
+  /// No description provided for @inputUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get inputUrl;
+
+  /// No description provided for @inputImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get inputImage;
+
+  /// No description provided for @inputFile.
+  ///
+  /// In en, this message translates to:
+  /// **'File'**
+  String get inputFile;
+
+  /// No description provided for @inputJson.
+  ///
+  /// In en, this message translates to:
+  /// **'JSON'**
+  String get inputJson;
+
+  /// No description provided for @inputValueHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter content'**
+  String get inputValueHint;
+
+  /// No description provided for @urlInputHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://example.com'**
+  String get urlInputHint;
+
+  /// No description provided for @continueLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueLabel;
 }
 
 class _AppLocalizationsDelegate

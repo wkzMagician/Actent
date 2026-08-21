@@ -63,13 +63,15 @@ class ActentTransportService implements MessageConnection {
     required this.repository,
     required this.relay,
     this.attachmentRoot,
-    this.maxMessageBytes = 20 * 1024 * 1024,
+    this.maxMessageBytes,
     this.seenPacketRetention = const Duration(days: 7),
     this.lanServerConfig,
     SeenPacketStore? seenPackets,
     this.lanConnectionFor,
     this.relayPublisherFor,
     this.subscriptionFor,
+    this.readAttachment,
+    this.writeAttachment,
   }) : _seenPackets =
            seenPackets ?? SeenPacketStore(retention: seenPacketRetention);
 
@@ -78,13 +80,24 @@ class ActentTransportService implements MessageConnection {
   final ActentRepository repository;
   final ActentRelaySettings relay;
   final Directory? attachmentRoot;
-  final int maxMessageBytes;
+
+  /// Optional application policy. A null value means that Actent does not
+  /// impose an arbitrary whole-message limit; the transport may still reject
+  /// a packet when its selected relay or LAN implementation cannot carry it.
+  final int? maxMessageBytes;
   final Duration seenPacketRetention;
   final ActentLanServerConfig? lanServerConfig;
   final PacketConnection Function(Device device)? lanConnectionFor;
   final RelayPublisher Function(Uri server)? relayPublisherFor;
   final NtfyPacketSubscription Function(Uri server, String topic, String? auth)?
   subscriptionFor;
+  final Future<Uint8List?> Function(String handle)? readAttachment;
+  final Future<String> Function(
+    String messageId,
+    String attachmentId,
+    Uint8List bytes,
+  )?
+  writeAttachment;
   final SeenPacketStore _seenPackets;
 
   ActentRouter? _router;
@@ -259,16 +272,17 @@ class ActentTransportService implements MessageConnection {
       if (handle is! String || handle.isEmpty) {
         throw const FormatException('attachment handle is missing');
       }
-      if (!_isOwnedAttachment(handle)) {
+      if (readAttachment == null && !_isOwnedAttachment(handle)) {
         throw const FormatException(
           'attachment handle is outside Actent storage',
         );
       }
-      final bytes = await File(handle).readAsBytes();
+      final bytes = await _readAttachment(handle);
       totalBytes += bytes.length;
-      if (totalBytes > maxMessageBytes) {
+      final configuredLimit = maxMessageBytes;
+      if (configuredLimit != null && totalBytes > configuredLimit) {
         throw StateError(
-          'message attachments exceed the 20 MB transport limit',
+          'message attachments exceed the configured transport limit',
         );
       }
       final attachmentId = attachment['id'];
@@ -316,7 +330,8 @@ class ActentTransportService implements MessageConnection {
   ) async {
     final rawTransfers = payload['attachmentTransfers'];
     if (rawTransfers == null) return payload;
-    if (rawTransfers is! List || attachmentRoot == null) {
+    if (rawTransfers is! List ||
+        (attachmentRoot == null && writeAttachment == null)) {
       throw const FormatException('attachment transfer is unavailable');
     }
     final request = payload['request'];
@@ -370,14 +385,26 @@ class ActentTransportService implements MessageConnection {
             !_safePathComponent(manifest.attachmentId)) {
           throw const FormatException('unsafe attachment path');
         }
-        final directory = Directory(
-          '${attachmentRoot!.path}${Platform.pathSeparator}$messageId${Platform.pathSeparator}${manifest.attachmentId}',
-        );
-        await directory.create(recursive: true);
-        final file = File('${directory.path}${Platform.pathSeparator}payload');
-        await file.writeAsBytes(bytes, flush: true);
-        createdFiles.add(file);
-        attachment['handle'] = file.path;
+        final targetRoot = attachmentRoot;
+        if (targetRoot != null) {
+          final directory = Directory(
+            '${targetRoot.path}${Platform.pathSeparator}$messageId${Platform.pathSeparator}${manifest.attachmentId}',
+          );
+          await directory.create(recursive: true);
+          final file = File(
+            '${directory.path}${Platform.pathSeparator}payload',
+          );
+          await file.writeAsBytes(bytes, flush: true);
+          createdFiles.add(file);
+          attachment['handle'] = file.path;
+        } else {
+          final handle = await writeAttachment!(
+            messageId,
+            manifest.attachmentId,
+            bytes,
+          );
+          attachment['handle'] = handle;
+        }
       }
       final copy = Map<String, Object?>.from(payload);
       final copyRequest = Map<String, Object?>.from(request);
@@ -406,6 +433,18 @@ class ActentTransportService implements MessageConnection {
         .replaceAll('\\', '/')
         .replaceFirst(RegExp(r'/$'), '');
     return filePath.toLowerCase().startsWith('${rootPath.toLowerCase()}/');
+  }
+
+  Future<Uint8List> _readAttachment(String handle) async {
+    final reader = readAttachment;
+    if (reader != null) {
+      final bytes = await reader(handle);
+      if (bytes == null) {
+        throw const FormatException('attachment content is unavailable');
+      }
+      return bytes;
+    }
+    return File(handle).readAsBytes();
   }
 
   SecretKey _decodeTransferKey(String value) {

@@ -49,6 +49,10 @@ class ActentHomePage extends StatefulWidget {
     this.desktopSecrets,
     this.router,
     this.queue,
+    this.pickWorkInputFile,
+    this.importWorkInputFiles,
+    this.initialFilePaths = const [],
+    this.externalFilePaths,
     this.showPairingQr,
     this.scanPairingQr,
     this.onLocaleChanged,
@@ -79,6 +83,11 @@ class ActentHomePage extends StatefulWidget {
   final DesktopSecretResolver? desktopSecrets;
   final ActentRouter? router;
   final WorkQueueCoordinator? queue;
+  final Future<ActentMessage?> Function()? pickWorkInputFile;
+  final Future<ActentMessage?> Function(List<String> paths)?
+  importWorkInputFiles;
+  final List<String> initialFilePaths;
+  final Stream<List<String>>? externalFilePaths;
   final Future<void> Function(BuildContext context, String invite)?
   showPairingQr;
   final Future<String?> Function(BuildContext context)? scanPairingQr;
@@ -97,6 +106,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
+  StreamSubscription<List<String>>? _externalFileSubscription;
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
   WorkQueueCoordinator? _queue;
@@ -107,9 +117,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final l10n = AppLocalizations.of(context)!;
     return [
       _ActentPageData(
-        title: l10n.inbox,
-        icon: Icons.inbox_outlined,
-        message: l10n.inboxDescription,
+        title: l10n.activity,
+        icon: Icons.history_outlined,
+        message: l10n.activityDescription,
       ),
       _ActentPageData(
         title: l10n.works,
@@ -145,6 +155,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _queue!.addReceiptListener(_onReceipt);
       _loadRepositoryData(repository);
     }
+    _externalFileSubscription = widget.externalFilePaths?.listen(
+      _importExternalFiles,
+    );
   }
 
   Future<void> _loadRepositoryData(ActentRepository repository) async {
@@ -243,6 +256,24 @@ class _ActentHomePageState extends State<ActentHomePage> {
       }
       await queue.restorePending(works);
     }
+    if (widget.initialFilePaths.isNotEmpty && mounted) {
+      await _importExternalFiles(widget.initialFilePaths);
+    }
+  }
+
+  Future<void> _importExternalFiles(List<String> paths) async {
+    final importer = widget.importWorkInputFiles;
+    if (importer == null) return;
+    try {
+      final message = await importer(paths);
+      if (message != null) await _onSharedMessage(message);
+    } on Object catch (error) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.fileSelectionFailed(error.toString()))),
+      );
+    }
   }
 
   Future<void> _onReceipt(WorkReceipt receipt) async {
@@ -255,6 +286,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   void dispose() {
     _shareSubscription?.cancel();
     _pairingAcceptanceSubscription?.cancel();
+    _externalFileSubscription?.cancel();
     unawaited(_closeLanPairing());
     super.dispose();
   }
@@ -281,7 +313,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
               title: Text(l10n.chooseWork),
               subtitle: Text(l10n.chooseWorkDescription),
             ),
-            for (final availableWork in _works.where(_isSelectableWork))
+            for (final availableWork in _works.where(
+              (availableWork) =>
+                  availableWork.accepts(message) &&
+                  _isSelectableWork(availableWork),
+            ))
               ListTile(
                 leading: const Icon(Icons.play_arrow_outlined),
                 title: Text(availableWork.name),
@@ -310,6 +346,190 @@ class _ActentHomePageState extends State<ActentHomePage> {
       ),
     );
     if (work == null || !mounted) return;
+    await _routeMessageToWork(message, work);
+  }
+
+  Future<void> _showMessagePicker(Work work) async {
+    if (!work.enabled || !_isSelectableWork(work)) return;
+    final accepted = work.acceptedContentTypes;
+    final fileTypes = {
+      ActentContentType.file,
+      ActentContentType.image,
+      ActentContentType.json,
+    };
+    final inputType = accepted.length == 1
+        ? accepted.single
+        : accepted.difference(fileTypes).isEmpty
+        ? ActentContentType.file
+        : await _showInputTypePicker(work);
+    if (inputType == null || !mounted) return;
+    if (inputType == ActentContentType.file ||
+        inputType == ActentContentType.image) {
+      await _pickFileForWork(work);
+      return;
+    }
+    if (inputType == ActentContentType.json &&
+        widget.pickWorkInputFile != null) {
+      await _pickFileForWork(work);
+      return;
+    }
+    final message = await _showManualInputDialog(inputType);
+    if (message != null && mounted) {
+      await _routeMessageToWork(message, work);
+    }
+  }
+
+  Future<ActentContentType?> _showInputTypePicker(Work work) async {
+    final l10n = AppLocalizations.of(context)!;
+    final types = work.acceptedContentTypes.toList()
+      ..sort((left, right) => left.index.compareTo(right.index));
+    return showModalBottomSheet<ActentContentType>(
+      context: context,
+      builder: (dialogContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              title: Text(l10n.chooseInputType),
+              subtitle: Text(l10n.chooseInputTypeDescription),
+            ),
+            for (final type in types)
+              ListTile(
+                leading: Icon(_contentTypeIcon(type)),
+                title: Text(_contentTypeLabel(type, l10n)),
+                onTap: () => Navigator.of(dialogContext).pop(type),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickFileForWork(Work work) async {
+    final l10n = AppLocalizations.of(context)!;
+    final pickWorkInputFile = widget.pickWorkInputFile;
+    if (pickWorkInputFile != null) {
+      try {
+        final message = await pickWorkInputFile();
+        if (message != null && mounted && work.accepts(message)) {
+          await _routeMessageToWork(message, work);
+        } else if (message != null && mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(l10n.inputTypeNotAccepted)));
+        }
+      } on Object catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.fileSelectionFailed(error.toString()))),
+        );
+      }
+      return;
+    }
+    final compatibleMessages = _messages
+        .where(work.accepts)
+        .toList(growable: false);
+    if (compatibleMessages.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.noMessagesAvailable)));
+      return;
+    }
+    final message = await showModalBottomSheet<ActentMessage>(
+      context: context,
+      builder: (dialogContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              title: Text(l10n.chooseWorkInput),
+              subtitle: Text(l10n.chooseWorkInputDescription),
+            ),
+            for (final candidate in compatibleMessages)
+              ListTile(
+                leading: const Icon(Icons.inbox_outlined),
+                title: Text(candidate.content.type.value),
+                subtitle: Text(candidate.id),
+                onTap: () => Navigator.of(dialogContext).pop(candidate),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (message == null || !mounted) return;
+    await _routeMessageToWork(message, work);
+  }
+
+  Future<ActentMessage?> _showManualInputDialog(ActentContentType type) async {
+    final l10n = AppLocalizations.of(context)!;
+    final controller = TextEditingController();
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_contentTypeLabel(type, l10n)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: type == ActentContentType.json ? 5 : 1,
+          maxLines: type == ActentContentType.json ? 12 : 5,
+          keyboardType: TextInputType.multiline,
+          decoration: InputDecoration(
+            hintText: type == ActentContentType.url
+                ? l10n.urlInputHint
+                : l10n.inputValueHint,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(l10n.continueLabel),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null || value.trim().isEmpty) return null;
+    final now = DateTime.now().toUtc();
+    final id = 'manual-${now.microsecondsSinceEpoch}';
+    final key = switch (type) {
+      ActentContentType.text => 'text',
+      ActentContentType.url => 'url',
+      ActentContentType.json => 'json',
+      _ => 'text',
+    };
+    return ActentMessage(
+      id: id,
+      traceId: id,
+      createdAt: now,
+      source: ActentSource(
+        kind: 'manual-input',
+        deviceId: widget.deviceId ?? 'local-device',
+        appName: 'Actent',
+      ),
+      content: ActentContent(type: type, data: {key: value.trim()}),
+    );
+  }
+
+  String _contentTypeLabel(ActentContentType type, AppLocalizations l10n) =>
+      switch (type) {
+        ActentContentType.text => l10n.inputText,
+        ActentContentType.url => l10n.inputUrl,
+        ActentContentType.image => l10n.inputImage,
+        ActentContentType.file => l10n.inputFile,
+        ActentContentType.json => l10n.inputJson,
+      };
+
+  IconData _contentTypeIcon(ActentContentType type) => switch (type) {
+    ActentContentType.text => Icons.text_fields,
+    ActentContentType.url => Icons.link,
+    ActentContentType.image => Icons.image_outlined,
+    ActentContentType.file => Icons.insert_drive_file_outlined,
+    ActentContentType.json => Icons.data_object,
+  };
+
+  Future<void> _routeMessageToWork(ActentMessage message, Work work) async {
     final repository = widget.repository;
     final queue = _queue;
     if (repository == null || queue == null) return;
@@ -337,8 +557,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _loadRepositoryData(repository);
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Work request failed: $error')));
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.workRequestFailed(error.toString()))),
+      );
     }
   }
 
@@ -469,70 +691,94 @@ class _ActentHomePageState extends State<ActentHomePage> {
     ),
   );
 
-  Widget _worksPage(BuildContext context) => _works.isEmpty
-      ? _emptyPage(_pages(context)[1])
-      : ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            for (final work in _works)
-              Card(
-                child: ListTile(
-                  leading: Icon(
-                    work.platformBindings['kind'] == 'null'
-                        ? Icons.archive_outlined
-                        : Icons.play_arrow_outlined,
-                  ),
-                  title: Text(work.name),
-                  subtitle: Text(
-                    '${work.id} · revision ${work.revision} · '
-                    '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
-                  ),
-                  trailing:
-                      work.ownerDeviceId ==
-                              (widget.deviceId ?? 'local-device') &&
-                          (work.platformBindings['kind'] == 'desktop-script' ||
-                              (kIsWeb &&
-                                  work.platformBindings['kind'] == 'web-js'))
-                      ? PopupMenuButton<String>(
-                          onSelected: (value) async {
-                            switch (value) {
-                              case 'edit':
-                                if (kIsWeb &&
-                                    work.platformBindings['kind'] == 'web-js') {
-                                  await _editWebJsWork(work);
-                                } else {
-                                  await _editDesktopWork(work);
-                                }
-                              case 'toggle':
-                                await _toggleWork(work);
-                              case 'delete':
-                                await _deleteWork(work);
-                            }
-                          },
-                          itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Text(AppLocalizations.of(context)!.edit),
-                            ),
-                            PopupMenuItem(
-                              value: 'toggle',
-                              child: Text(
-                                work.enabled
-                                    ? AppLocalizations.of(context)!.disable
-                                    : AppLocalizations.of(context)!.enable,
+  Widget _worksPage(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return _works.isEmpty
+        ? _emptyPage(_pages(context)[1])
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              for (final work in _works)
+                Card(
+                  child: ListTile(
+                    leading: IconButton(
+                      tooltip: l10n.runWork,
+                      onPressed: work.enabled && _isSelectableWork(work)
+                          ? () => _showMessagePicker(work)
+                          : null,
+                      icon: const Icon(Icons.play_arrow_outlined),
+                    ),
+                    title: Text(work.name),
+                    subtitle: Text(
+                      '${_workOwnerLabel(work, l10n)} · '
+                      '${work.id} · revision ${work.revision} · '
+                      '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
+                    ),
+                    trailing: _isLocalWork(work)
+                        ? PopupMenuButton<String>(
+                            onSelected: (value) async {
+                              switch (value) {
+                                case 'edit':
+                                  await _editWork(work);
+                                case 'toggle':
+                                  await _toggleWork(work);
+                                case 'delete':
+                                  await _deleteWork(work);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              if (_canEditWork(work))
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Text(l10n.edit),
+                                ),
+                              PopupMenuItem(
+                                value: 'toggle',
+                                child: Text(
+                                  work.enabled ? l10n.disable : l10n.enable,
+                                ),
                               ),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text(AppLocalizations.of(context)!.delete),
-                            ),
-                          ],
-                        )
-                      : null,
+                              if (work.id != 'android-share')
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text(l10n.delete),
+                                ),
+                            ],
+                          )
+                        : null,
+                  ),
                 ),
-              ),
-          ],
-        );
+            ],
+          );
+  }
+
+  bool _isLocalWork(Work work) =>
+      work.ownerDeviceId == (widget.deviceId ?? 'local-device');
+
+  bool _canEditWork(Work work) => switch (work.platformBindings['kind']) {
+    'null' => true,
+    'web-js' => kIsWeb,
+    'desktop-script' => widget.canEditWorks,
+    _ => false,
+  };
+
+  String _workOwnerLabel(Work work, AppLocalizations l10n) {
+    if (_isLocalWork(work)) return l10n.thisDevice;
+    for (final device in _devices) {
+      if (device.id == work.ownerDeviceId) return device.displayName;
+    }
+    return work.ownerDeviceId;
+  }
+
+  String _attachmentRetentionLabel(
+    AttachmentRetention value,
+    AppLocalizations l10n,
+  ) => switch (value) {
+    AttachmentRetention.oneDay => l10n.retentionOneDay,
+    AttachmentRetention.sevenDays => l10n.retentionSevenDays,
+    AttachmentRetention.oneMonth => l10n.retentionOneMonth,
+    AttachmentRetention.forever => l10n.retentionForever,
+  };
 
   Future<void> _showAddWork() {
     if (kIsWeb) return _addWebJsWork();
@@ -584,6 +830,63 @@ class _ActentHomePageState extends State<ActentHomePage> {
         platformBindings: const {'kind': 'null'},
       ),
     );
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
+  }
+
+  Future<void> _editWork(Work work) => switch (work.platformBindings['kind']) {
+    'null' => _editNullWork(work),
+    'web-js' when kIsWeb => _editWebJsWork(work),
+    'desktop-script' when widget.canEditWorks => _editDesktopWork(work),
+    _ => Future<void>.value(),
+  };
+
+  Future<void> _editNullWork(Work existing) async {
+    final l10n = AppLocalizations.of(context)!;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController(text: existing.name);
+        return AlertDialog(
+          title: Text(l10n.edit),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(labelText: l10n.name),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty) return;
+    final repository = widget.repository;
+    if (repository == null) return;
+    await repository.saveWork(
+      Work(
+        id: existing.id,
+        revision: existing.revision + 1,
+        name: name,
+        ownerDeviceId: existing.ownerDeviceId,
+        allowedSourceDeviceIds: existing.allowedSourceDeviceIds,
+        acceptedContentTypes: existing.acceptedContentTypes,
+        timeout: existing.timeout,
+        queueLimit: existing.queueLimit,
+        enabled: existing.enabled,
+        platformBindings: existing.platformBindings,
+        catalogVisibility: existing.catalogVisibility,
+      ),
+    );
+    await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
 
@@ -674,6 +977,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final repository = widget.repository;
     if (repository == null) return;
     await repository.saveWork(work);
+    await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
 
@@ -777,17 +1081,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       return;
     }
     await repository.saveWork(work);
-    final router = widget.router;
-    if (router != null) {
-      for (final device in _devices.where((device) => device.authorized)) {
-        try {
-          await router.sendCatalogDelta(device.id);
-        } on Object {
-          // A disconnected peer receives the latest catalog on its next
-          // pairing/reconnect; local Work creation must still succeed.
-        }
-      }
-    }
+    await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
 
@@ -1522,13 +1816,17 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ListTile(
           leading: const Icon(Icons.cleaning_services_outlined),
           title: Text(l10n.purgeExpiredAttachments),
-          subtitle: Text(l10n.currentRetention(_retention.name)),
+          subtitle: Text(
+            l10n.currentRetention(_attachmentRetentionLabel(_retention, l10n)),
+          ),
           onTap: _chooseRetention,
         ),
         ListTile(
           leading: const Icon(Icons.content_copy_outlined),
           title: Text(l10n.packetDeduplicationRetention),
-          subtitle: Text('${_packetDedupRetention.inDays} day(s)'),
+          subtitle: Text(
+            l10n.packetRetentionDays(_packetDedupRetention.inDays),
+          ),
           onTap: _choosePacketDedupRetention,
         ),
         ListTile(
@@ -1678,12 +1976,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
           for (final value in AttachmentRetention.values)
             SimpleDialogOption(
               onPressed: () => Navigator.of(dialogContext).pop(value),
-              child: Text(switch (value) {
-                AttachmentRetention.oneDay => l10n.retentionOneDay,
-                AttachmentRetention.sevenDays => l10n.retentionSevenDays,
-                AttachmentRetention.oneMonth => l10n.retentionOneMonth,
-                AttachmentRetention.forever => l10n.retentionForever,
-              }),
+              child: Text(_attachmentRetentionLabel(value, l10n)),
             ),
         ],
       ),

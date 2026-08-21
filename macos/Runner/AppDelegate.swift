@@ -3,6 +3,10 @@ import FlutterMacOS
 
 @main
 class AppDelegate: FlutterAppDelegate {
+  override func application(_ application: NSApplication, openFiles filenames: [String]) {
+    MainFlutterWindow.deliverOpenFiles(filenames)
+  }
+
   override func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
     return true
   }

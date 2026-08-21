@@ -12,6 +12,24 @@ import 'package:actent/features/work/work_runner.dart';
 
 void main() {
   group('Actent schema', () {
+    test('classifies a file batch conservatively by MIME type', () {
+      expect(
+        classifyAttachmentContentTypes(['image/png', 'image/jpeg']),
+        ActentContentType.image,
+      );
+      expect(
+        classifyAttachmentContentTypes([
+          'application/json',
+          'application/vnd.example+json',
+        ]),
+        ActentContentType.json,
+      );
+      expect(
+        classifyAttachmentContentTypes(['image/png', 'application/pdf']),
+        ActentContentType.file,
+      );
+    });
+
     test('round trips a versioned message', () {
       final message = ActentMessage(
         id: 'message-1',

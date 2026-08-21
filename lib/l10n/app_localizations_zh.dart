@@ -25,10 +25,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayQuit => '退出 Actent';
 
   @override
-  String get inbox => '收件箱';
+  String get activity => '活动';
 
   @override
-  String get inboxDescription => '共享内容和 Work 回执会显示在这里。';
+  String get activityDescription => '输入内容及 Work 执行记录会显示在这里。';
 
   @override
   String get works => 'Work';
@@ -70,7 +70,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get attachmentRetention => '附件保留';
 
   @override
-  String get attachmentRetentionDescription => '默认保留 7 天；收件箱消息会一直保留，直到手动删除。';
+  String get attachmentRetentionDescription => '默认保留 7 天；活动记录会一直保留，直到手动删除。';
 
   @override
   String get purgeExpiredAttachments => '清理过期附件';
@@ -267,7 +267,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String removePairedDeviceMessage(Object name) {
-    return '移除 $name 及其远程 Work 目录？现有收件箱历史会保留。';
+    return '移除 $name 及其远程 Work 目录？现有活动记录会保留。';
   }
 
   @override
@@ -357,4 +357,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get invitationLinkCopied => '邀请链接已复制。';
+
+  @override
+  String get runWork => '运行 Work';
+
+  @override
+  String get chooseWorkInput => '选择输入内容';
+
+  @override
+  String get chooseWorkInputDescription => '选择要发送到此 Work 的兼容活动内容。';
+
+  @override
+  String get noMessagesAvailable => '没有可供此 Work 运行的兼容活动内容。';
+
+  @override
+  String workRequestFailed(Object error) {
+    return 'Work 请求失败：$error';
+  }
+
+  @override
+  String pairingCode(Object code) {
+    return '配对码：$code';
+  }
+
+  @override
+  String get pairingCodeDescription => '请在另一台设备输入此代码，以确认两台设备正在互相配对。';
+
+  @override
+  String fileSelectionFailed(Object error) {
+    return '无法选择文件：$error';
+  }
+
+  @override
+  String get chooseInputType => '选择输入类型';
+
+  @override
+  String get chooseInputTypeDescription => '选择要发送到此 Work 的内容类型。';
+
+  @override
+  String get inputTypeNotAccepted => '所选 Work 不接受此文件类型。';
+
+  @override
+  String get inputText => '文本';
+
+  @override
+  String get inputUrl => '链接';
+
+  @override
+  String get inputImage => '图片';
+
+  @override
+  String get inputFile => '文件';
+
+  @override
+  String get inputJson => 'JSON';
+
+  @override
+  String get inputValueHint => '输入内容';
+
+  @override
+  String get urlInputHint => 'https://example.com';
+
+  @override
+  String get continueLabel => '继续';
 }

@@ -20,6 +20,7 @@ jobs:
       - run: flutter pub get
       - run: flutter build apk --release
       - run: flutter build appbundle --release
+
       - name: Package Android
         shell: bash
         run: |
@@ -40,6 +41,12 @@ jobs:
           flutter-version: '3.47.0'
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
+      - name: Run project post-build hooks
+        shell: bash
+        run: |
+          set -euo pipefail
+          DARTLOOM_BUILD_MODE='release' DARTLOOM_NATIVE_TARGETS='ActentShareExtension' bash 'tool/build_ios_native_targets.sh' 'release'
+
       - name: Package iOS IPA
         shell: bash
         run: |
@@ -61,13 +68,14 @@ jobs:
       - run: flutter pub get
       - run: choco install innosetup --no-progress -y
       - run: flutter build windows --release
+
       - name: Package Windows installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
           $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)').Matches.Groups[1].Value
           if (-not $version) { throw "pubspec.yaml version not found" }
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" installer\windows.iss
+          & (Get-Command ISCC.exe -ErrorAction Stop).Source "/DMyAppVersion=$version" installer\windows.iss
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -82,12 +90,13 @@ jobs:
           flutter-version: '3.47.0'
       - run: flutter pub get
       - run: flutter build macos --release
-      - name: Package macOS app
+
+      - name: Package macOS DMG
         shell: bash
         run: |
           mkdir -p dist
           app_path=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -type d | head -n 1)
-          ditto -c -k --keepParent "$app_path" dist/actent-macos.zip
+          hdiutil create -volname actent -srcfolder "$app_path" -ov -format UDZO dist/actent-macos.dmg
       - uses: actions/upload-artifact@v4
         with:
           name: macos
@@ -100,17 +109,43 @@ jobs:
       - name: Install Linux build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libsecret-1-dev libayatana-appindicator3-dev zip
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev zip
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.0'
       - run: flutter pub get
       - run: flutter build linux --release
-      - name: Package Linux bundle
+
+      - name: Package Linux bundles
         shell: bash
         run: |
           mkdir -p dist
           tar -czf dist/actent-linux-x64.tar.gz -C build/linux/x64/release bundle
+          version=$(sed -n 's/^version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)
+          test -n "$version"
+          package_dir="$(mktemp -d)"
+          mkdir -p "$package_dir/DEBIAN" "$package_dir/opt/actent" "$package_dir/usr/share/applications"
+          cp -R build/linux/x64/release/bundle/. "$package_dir/opt/actent/"
+          cat > "$package_dir/DEBIAN/control" <<EOF
+          Package: actent
+          Version: $version
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Dartloom project
+          Description: actent
+          EOF
+          cat > "$package_dir/usr/share/applications/actent.desktop" <<EOF
+          [Desktop Entry]
+          Name=actent
+          Exec=/opt/actent/actent %F
+          Type=Application
+          Terminal=false
+          MimeType=application/octet-stream;
+          Categories=Utility;
+          EOF
+          dpkg-deb --build "$package_dir" "dist/actent-linux-x64.deb"
+          rm -rf "$package_dir"
       - uses: actions/upload-artifact@v4
         with:
           name: linux
@@ -125,6 +160,7 @@ jobs:
           flutter-version: '3.47.0'
       - run: flutter pub get
       - run: flutter build web --release
+
       - name: Package Web
         shell: bash
         run: |

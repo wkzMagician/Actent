@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Actent</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.example.actent.ShareExtension</string>
+	<key>CFBundleName</key>
+	<string>Actent Share</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<key>NSExtensionActivationRule</key>
+			<dict>
+				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
+				<integer>100</integer>
+				<key>NSExtensionActivationSupportsText</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

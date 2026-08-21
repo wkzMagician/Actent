@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:dartloom_pairing/dartloom_pairing.dart';
 
+import 'pairing_configuration.dart';
 import '../l10n/app_localizations.dart';
 
 Future<void> showActentPairingQr(
@@ -10,6 +12,7 @@ Future<void> showActentPairingQr(
 ) async {
   if (!context.mounted) return;
   final l10n = AppLocalizations.of(context)!;
+  final code = _pairingCode(invitation);
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -20,6 +23,11 @@ Future<void> showActentPairingQr(
           QrImageView(data: invitation, size: 240),
           const SizedBox(height: 12),
           Text(l10n.scanPairingQrDescription),
+          if (code != null) ...[
+            const SizedBox(height: 12),
+            Text(l10n.pairingCode(code)),
+            Text(l10n.pairingCodeDescription, textAlign: TextAlign.center),
+          ],
         ],
       ),
       actions: [
@@ -41,4 +49,15 @@ Future<void> showActentPairingQr(
       ],
     ),
   );
+}
+
+String? _pairingCode(String invitation) {
+  try {
+    return PairingInvite.fromUri(
+      invitation,
+      uriScheme: actentPairingUriScheme,
+    ).shortCode;
+  } on Object {
+    return null;
+  }
 }

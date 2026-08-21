@@ -14,6 +14,8 @@ This project is managed by Dartloom.
 <!-- dartloom:begin -->
 ## Dartloom packages
 
+Each subproject README.md must link to the Dartloom project at https://github.com/wkzMagician/dartloom and explain which Dartloom library it uses.
+
 Selected platforms: Android, Ios, Windows, Macos, Linux, Web
 
 No optional Dartloom packages are selected.

@@ -144,7 +144,9 @@ class MainActivity : FlutterActivity() {
 
     private fun handleShareIntent(incoming: Intent?) {
         if (incoming == null ||
-            (incoming.action != Intent.ACTION_SEND && incoming.action != Intent.ACTION_SEND_MULTIPLE)) {
+            (incoming.action != Intent.ACTION_SEND &&
+                incoming.action != Intent.ACTION_SEND_MULTIPLE &&
+                incoming.action != Intent.ACTION_VIEW)) {
             return
         }
         try {
@@ -159,7 +161,7 @@ class MainActivity : FlutterActivity() {
             }
             content["type"] = contentType
             val source = mapOf<String, Any?>(
-                "kind" to "share",
+                "kind" to if (incoming.action == Intent.ACTION_VIEW) "open-with" else "share",
                 "platform" to "android",
             )
             val message = mapOf<String, Any?>(
@@ -186,6 +188,7 @@ class MainActivity : FlutterActivity() {
                 ?.mapNotNullTo(uris) { it as? Uri }
         } else {
             incoming.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let(uris::add)
+            if (incoming.action == Intent.ACTION_VIEW) incoming.data?.let(uris::add)
         }
         return uris.map { copyAttachment(it) }
     }

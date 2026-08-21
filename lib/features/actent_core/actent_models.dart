@@ -4,6 +4,24 @@ const actentSchemaVersion = 1;
 
 enum ActentContentType { text, url, image, file, json }
 
+ActentContentType classifyAttachmentContentTypes(Iterable<String> mimeTypes) {
+  final normalized = mimeTypes
+      .map((mimeType) => mimeType.toLowerCase())
+      .toList(growable: false);
+  if (normalized.isNotEmpty &&
+      normalized.every((mimeType) => mimeType.startsWith('image/'))) {
+    return ActentContentType.image;
+  }
+  if (normalized.isNotEmpty &&
+      normalized.every(
+        (mimeType) =>
+            mimeType == 'application/json' || mimeType.endsWith('+json'),
+      )) {
+    return ActentContentType.json;
+  }
+  return ActentContentType.file;
+}
+
 extension ActentContentTypeJson on ActentContentType {
   String get value => name;
 
