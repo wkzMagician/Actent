@@ -355,6 +355,396 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No pairing-enabled devices were found.'**
   String get lanNoDevices;
+
+  /// No description provided for @chooseWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Work'**
+  String get chooseWork;
+
+  /// No description provided for @chooseWorkDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Select where this shared content should go.'**
+  String get chooseWorkDescription;
+
+  /// No description provided for @thisDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'This device'**
+  String get thisDevice;
+
+  /// No description provided for @remoteDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote device'**
+  String get remoteDevice;
+
+  /// No description provided for @nullWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Null — store locally'**
+  String get nullWork;
+
+  /// No description provided for @discard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// No description provided for @close.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get close;
+
+  /// No description provided for @runAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Run again'**
+  String get runAgain;
+
+  /// No description provided for @cancelPendingRequests.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel pending requests'**
+  String get cancelPendingRequests;
+
+  /// No description provided for @deleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message'**
+  String get deleteMessage;
+
+  /// No description provided for @pairDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair device'**
+  String get pairDevice;
+
+  /// No description provided for @addWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Work'**
+  String get addWork;
+
+  /// No description provided for @edit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get edit;
+
+  /// No description provided for @enable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get enable;
+
+  /// No description provided for @disable.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable'**
+  String get disable;
+
+  /// No description provided for @delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get delete;
+
+  /// No description provided for @addJavaScriptWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add JavaScript Work'**
+  String get addJavaScriptWork;
+
+  /// No description provided for @editJavaScriptWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit JavaScript Work'**
+  String get editJavaScriptWork;
+
+  /// No description provided for @addScriptWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Script Work'**
+  String get addScriptWork;
+
+  /// No description provided for @editScriptWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Script Work'**
+  String get editScriptWork;
+
+  /// No description provided for @name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get name;
+
+  /// No description provided for @javaScriptBody.
+  ///
+  /// In en, this message translates to:
+  /// **'JavaScript body'**
+  String get javaScriptBody;
+
+  /// No description provided for @allowedNetworkHosts.
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed network hosts (one per line)'**
+  String get allowedNetworkHosts;
+
+  /// No description provided for @absoluteExecutablePath.
+  ///
+  /// In en, this message translates to:
+  /// **'Absolute executable path'**
+  String get absoluteExecutablePath;
+
+  /// No description provided for @argumentsOnePerLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Arguments (one per line)'**
+  String get argumentsOnePerLine;
+
+  /// No description provided for @deleteWorkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Work?'**
+  String get deleteWorkTitle;
+
+  /// No description provided for @deleteWorkMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete “{name}” and cancel pending requests?'**
+  String deleteWorkMessage(Object name);
+
+  /// No description provided for @relaySettingsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Relay settings'**
+  String get relaySettingsTitle;
+
+  /// No description provided for @saveFailedWithError.
+  ///
+  /// In en, this message translates to:
+  /// **'Save failed: {error}'**
+  String saveFailedWithError(Object error);
+
+  /// No description provided for @attachmentRetentionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment retention'**
+  String get attachmentRetentionTitle;
+
+  /// No description provided for @removedExpiredMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed {count} expired message(s).'**
+  String removedExpiredMessages(Object count);
+
+  /// No description provided for @packetDeduplicationRetentionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Packet deduplication retention'**
+  String get packetDeduplicationRetentionTitle;
+
+  /// No description provided for @deduplicationRetentionSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Deduplication retention saved; restart to apply.'**
+  String get deduplicationRetentionSaved;
+
+  /// No description provided for @exportConfigurationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Export configuration'**
+  String get exportConfigurationTitle;
+
+  /// No description provided for @importConfigurationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import configuration'**
+  String get importConfigurationTitle;
+
+  /// No description provided for @import.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get import;
+
+  /// No description provided for @importFailedWithError.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailedWithError(Object error);
+
+  /// No description provided for @removePairedDeviceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove paired device?'**
+  String get removePairedDeviceTitle;
+
+  /// No description provided for @removePairedDeviceMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {name} and its remote Work catalog? Existing Inbox history is kept.'**
+  String removePairedDeviceMessage(Object name);
+
+  /// No description provided for @remove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get remove;
+
+  /// No description provided for @discoverOnLan.
+  ///
+  /// In en, this message translates to:
+  /// **'Discover on LAN'**
+  String get discoverOnLan;
+
+  /// No description provided for @pasteInvitation.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste invitation'**
+  String get pasteInvitation;
+
+  /// No description provided for @scanQrInvitation.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR invitation'**
+  String get scanQrInvitation;
+
+  /// No description provided for @nearbyDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby Actent devices'**
+  String get nearbyDevices;
+
+  /// No description provided for @confirmLanPairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm LAN pairing code'**
+  String get confirmLanPairingCode;
+
+  /// No description provided for @confirmPairingCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm pairing code'**
+  String get confirmPairingCode;
+
+  /// No description provided for @sixDigitCode.
+  ///
+  /// In en, this message translates to:
+  /// **'6-digit code'**
+  String get sixDigitCode;
+
+  /// No description provided for @confirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get confirm;
+
+  /// No description provided for @addPairedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Add paired device'**
+  String get addPairedDevice;
+
+  /// No description provided for @invitationUri.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation URI'**
+  String get invitationUri;
+
+  /// No description provided for @pairingFailedWithError.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing failed: {error}'**
+  String pairingFailedWithError(Object error);
+
+  /// No description provided for @confirmNewPairedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new paired device'**
+  String get confirmNewPairedDevice;
+
+  /// No description provided for @deviceName.
+  ///
+  /// In en, this message translates to:
+  /// **'Name: {name}'**
+  String deviceName(Object name);
+
+  /// No description provided for @deviceId.
+  ///
+  /// In en, this message translates to:
+  /// **'Device ID: {id}'**
+  String deviceId(Object id);
+
+  /// No description provided for @platform.
+  ///
+  /// In en, this message translates to:
+  /// **'Platform: {platform}'**
+  String platform(Object platform);
+
+  /// No description provided for @publicKeyFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Public-key fingerprint:'**
+  String get publicKeyFingerprint;
+
+  /// No description provided for @reject.
+  ///
+  /// In en, this message translates to:
+  /// **'Reject'**
+  String get reject;
+
+  /// No description provided for @retentionOneDay.
+  ///
+  /// In en, this message translates to:
+  /// **'1 day'**
+  String get retentionOneDay;
+
+  /// No description provided for @retentionSevenDays.
+  ///
+  /// In en, this message translates to:
+  /// **'7 days'**
+  String get retentionSevenDays;
+
+  /// No description provided for @retentionOneMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'1 month'**
+  String get retentionOneMonth;
+
+  /// No description provided for @retentionForever.
+  ///
+  /// In en, this message translates to:
+  /// **'Forever'**
+  String get retentionForever;
+
+  /// No description provided for @packetRetentionDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} day(s)'**
+  String packetRetentionDays(Object days);
+
+  /// No description provided for @scanPairingQrDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan this QR code to pair the device.'**
+  String get scanPairingQrDescription;
+
+  /// No description provided for @copyInvitationLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy invitation link'**
+  String get copyInvitationLink;
+
+  /// No description provided for @invitationLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation link copied.'**
+  String get invitationLinkCopied;
 }
 
 class _AppLocalizationsDelegate

@@ -21,6 +21,7 @@ import 'configuration_transfer.dart';
 import 'attachment_retention.dart';
 import 'actent_store.dart';
 import '../../l10n/app_localizations.dart';
+import '../../app/pairing_configuration.dart';
 
 class ActentHomePage extends StatefulWidget {
   const ActentHomePage({
@@ -269,28 +270,29 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _showWorkPicker(ActentMessage message) async {
+    final l10n = AppLocalizations.of(context)!;
     final work = await showModalBottomSheet<Work>(
       context: context,
       builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           children: [
-            const ListTile(
-              title: Text('Choose Work'),
-              subtitle: Text('Select where this shared content should go.'),
+            ListTile(
+              title: Text(l10n.chooseWork),
+              subtitle: Text(l10n.chooseWorkDescription),
             ),
             for (final availableWork in _works.where(_isSelectableWork))
               ListTile(
                 leading: const Icon(Icons.play_arrow_outlined),
                 title: Text(availableWork.name),
                 subtitle: Text(
-                  '${availableWork.ownerDeviceId == (widget.deviceId ?? 'local-device') ? 'This device' : 'Remote device'} · revision ${availableWork.revision}',
+                  '${availableWork.ownerDeviceId == (widget.deviceId ?? 'local-device') ? l10n.thisDevice : l10n.remoteDevice} · revision ${availableWork.revision}',
                 ),
                 onTap: () => Navigator.of(context).pop(availableWork),
               ),
             ListTile(
               leading: const Icon(Icons.archive_outlined),
-              title: const Text('Null — store locally'),
+              title: Text(l10n.nullWork),
               onTap: () => Navigator.of(context).pop(
                 Work.nullWork(
                   id: 'local-null',
@@ -300,7 +302,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
             ),
             ListTile(
               leading: const Icon(Icons.close),
-              title: const Text('Discard'),
+              title: Text(l10n.discard),
               onTap: () => Navigator.of(context).pop(),
             ),
           ],
@@ -380,18 +382,25 @@ class _ActentHomePageState extends State<ActentHomePage> {
                                   await _deleteMessage(message);
                                 }
                               },
-                              itemBuilder: (context) => const [
+                              itemBuilder: (context) => [
                                 PopupMenuItem(
                                   value: 'retry',
-                                  child: Text('Run again'),
+                                  child: Text(
+                                    AppLocalizations.of(context)!.runAgain,
+                                  ),
                                 ),
                                 PopupMenuItem(
                                   value: 'cancel',
-                                  child: Text('Cancel pending requests'),
+                                  child: Text(
+                                    AppLocalizations.of(context)!
+                                        .cancelPendingRequests,
+                                  ),
                                 ),
                                 PopupMenuItem(
                                   value: 'delete',
-                                  child: Text('Delete message'),
+                                  child: Text(
+                                    AppLocalizations.of(context)!.deleteMessage,
+                                  ),
                                 ),
                               ],
                             ),
@@ -414,13 +423,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
           ? FloatingActionButton.extended(
               onPressed: _showPairingActions,
               icon: const Icon(Icons.person_add_alt_1),
-              label: const Text('Pair device'),
+              label: Text(AppLocalizations.of(context)!.pairDevice),
             )
-          : _selectedIndex == 1 && widget.canEditWorks
+          : _selectedIndex == 1
           ? FloatingActionButton.extended(
-              onPressed: kIsWeb ? _addWebJsWork : _addDesktopWork,
+              onPressed: _showAddWork,
               icon: const Icon(Icons.add),
-              label: const Text('Add Work'),
+              label: Text(AppLocalizations.of(context)!.addWork),
             )
           : null,
       bottomNavigationBar: NavigationBar(
@@ -476,7 +485,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   title: Text(work.name),
                   subtitle: Text(
                     '${work.id} · revision ${work.revision} · '
-                    '${work.enabled ? 'enabled' : 'disabled'}',
+                    '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
                   ),
                   trailing:
                       work.ownerDeviceId ==
@@ -501,17 +510,21 @@ class _ActentHomePageState extends State<ActentHomePage> {
                             }
                           },
                           itemBuilder: (context) => [
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'edit',
-                              child: Text('Edit'),
+                              child: Text(AppLocalizations.of(context)!.edit),
                             ),
                             PopupMenuItem(
                               value: 'toggle',
-                              child: Text(work.enabled ? 'Disable' : 'Enable'),
+                              child: Text(
+                                work.enabled
+                                    ? AppLocalizations.of(context)!.disable
+                                    : AppLocalizations.of(context)!.enable,
+                              ),
                             ),
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: 'delete',
-                              child: Text('Delete'),
+                              child: Text(AppLocalizations.of(context)!.delete),
                             ),
                           ],
                         )
@@ -521,11 +534,61 @@ class _ActentHomePageState extends State<ActentHomePage> {
           ],
         );
 
+  Future<void> _showAddWork() {
+    if (kIsWeb) return _addWebJsWork();
+    if (widget.canEditWorks) return _addDesktopWork();
+    return _addNullWork();
+  }
+
   Future<void> _addDesktopWork() => _editDesktopWork();
 
   Future<void> _addWebJsWork() => _editWebJsWork();
 
+  Future<void> _addNullWork() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.addWork),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(labelText: l10n.name),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty) return;
+    await repository.saveWork(
+      Work(
+        id: 'null-${DateTime.now().microsecondsSinceEpoch}',
+        revision: 1,
+        name: name,
+        ownerDeviceId: widget.deviceId ?? 'local-device',
+        acceptedContentTypes: ActentContentType.values.toSet(),
+        platformBindings: const {'kind': 'null'},
+      ),
+    );
+    await _loadRepositoryData(repository);
+  }
+
   Future<void> _editWebJsWork([Work? existing]) async {
+    final l10n = AppLocalizations.of(context)!;
     final values = await showDialog<(String, String, String)?>(
       context: context,
       builder: (dialogContext) {
@@ -544,7 +607,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         );
         return AlertDialog(
           title: Text(
-            existing == null ? 'Add JavaScript Work' : 'Edit JavaScript Work',
+            existing == null ? l10n.addJavaScriptWork : l10n.editJavaScriptWork,
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -552,20 +615,18 @@ class _ActentHomePageState extends State<ActentHomePage> {
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                  decoration: InputDecoration(labelText: l10n.name),
                 ),
                 TextField(
                   controller: source,
-                  decoration: const InputDecoration(
-                    labelText: 'JavaScript body',
-                  ),
+                  decoration: InputDecoration(labelText: l10n.javaScriptBody),
                   minLines: 8,
                   maxLines: 14,
                 ),
                 TextField(
                   controller: hosts,
-                  decoration: const InputDecoration(
-                    labelText: 'Allowed network hosts (one per line)',
+                  decoration: InputDecoration(
+                    labelText: l10n.allowedNetworkHosts,
                   ),
                   maxLines: 3,
                 ),
@@ -575,13 +636,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () =>
                   Navigator.of(dialogContext)
                       .pop((name.text.trim(), source.text, hosts.text)),
-              child: const Text('Save'),
+              child: Text(l10n.save),
             ),
           ],
         );
@@ -617,6 +678,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _editDesktopWork([Work? existing]) async {
+    final l10n = AppLocalizations.of(context)!;
     final values = await showDialog<(String, String, String)?>(
       context: context,
       builder: (dialogContext) {
@@ -633,7 +695,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         );
         return AlertDialog(
           title: Text(
-            existing == null ? 'Add Script Work' : 'Edit Script Work',
+            existing == null ? l10n.addScriptWork : l10n.editScriptWork,
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -641,18 +703,18 @@ class _ActentHomePageState extends State<ActentHomePage> {
               children: [
                 TextField(
                   controller: name,
-                  decoration: const InputDecoration(labelText: 'Name'),
+                  decoration: InputDecoration(labelText: l10n.name),
                 ),
                 TextField(
                   controller: executable,
-                  decoration: const InputDecoration(
-                    labelText: 'Absolute executable path',
+                  decoration: InputDecoration(
+                    labelText: l10n.absoluteExecutablePath,
                   ),
                 ),
                 TextField(
                   controller: arguments,
-                  decoration: const InputDecoration(
-                    labelText: 'Arguments (one per line)',
+                  decoration: InputDecoration(
+                    labelText: l10n.argumentsOnePerLine,
                   ),
                   maxLines: 3,
                 ),
@@ -662,13 +724,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(
                 dialogContext,
               ).pop((name.text.trim(), executable.text.trim(), arguments.text)),
-              child: const Text('Save'),
+              child: Text(l10n.save),
             ),
           ],
         );
@@ -752,21 +814,22 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _deleteWork(Work work) async {
+    final l10n = AppLocalizations.of(context)!;
     final repository = widget.repository;
     if (repository == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Work?'),
-        content: Text('Delete “${work.name}” and cancel pending requests?'),
+        title: Text(l10n.deleteWorkTitle),
+        content: Text(l10n.deleteWorkMessage(work.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.delete),
           ),
         ],
       ),
@@ -826,22 +889,20 @@ class _ActentHomePageState extends State<ActentHomePage> {
         );
 
   Future<void> _unpairDevice(Device device) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Remove paired device?'),
-        content: Text(
-          'Remove ${device.displayName} and its remote Work catalog? '
-          'Existing Inbox history is kept.',
-        ),
+        title: Text(l10n.removePairedDeviceTitle),
+        content: Text(l10n.removePairedDeviceMessage(device.displayName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
+            child: Text(l10n.remove),
           ),
         ],
       ),
@@ -871,18 +932,18 @@ class _ActentHomePageState extends State<ActentHomePage> {
         OutlinedButton.icon(
           onPressed: _discoverLanDevices,
           icon: const Icon(Icons.wifi_find),
-          label: const Text('Discover on LAN'),
+          label: Text(AppLocalizations.of(context)!.discoverOnLan),
         ),
       OutlinedButton.icon(
         onPressed: _importPairingInvite,
         icon: const Icon(Icons.content_paste_go),
-        label: const Text('Paste invitation'),
+        label: Text(AppLocalizations.of(context)!.pasteInvitation),
       ),
       if (widget.scanPairingQr != null)
         OutlinedButton.icon(
           onPressed: _scanPairingInvite,
           icon: const Icon(Icons.qr_code_scanner),
-          label: const Text('Scan QR invitation'),
+          label: Text(AppLocalizations.of(context)!.scanQrInvitation),
         ),
     ],
   );
@@ -904,7 +965,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       final selected = await showDialog<PairingAdvertisement>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Nearby Actent devices'),
+          title: Text(l10n.nearbyDevices),
           content: advertisements.isEmpty
               ? Text(l10n.lanNoDevices)
               : SizedBox(
@@ -930,7 +991,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Close'),
+              child: Text(l10n.close),
             ),
           ],
         ),
@@ -952,7 +1013,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         'discovery result has no pairing endpoint',
       );
     }
-    final client = LanPairingClient();
+    final client = LanPairingClient(uriScheme: actentPairingUriScheme);
     final invite = await client.fetchInvite(host: host, port: port);
     if (advertisement.fingerprint.isNotEmpty &&
         _publicKeyFingerprint(invite.issuerPublicKey) !=
@@ -1000,22 +1061,23 @@ class _ActentHomePageState extends State<ActentHomePage> {
   Future<String?> _requestPairingCode() => showDialog<String>(
     context: context,
     builder: (dialogContext) {
+      final l10n = AppLocalizations.of(context)!;
       final controller = TextEditingController();
       return AlertDialog(
-        title: const Text('Confirm LAN pairing code'),
+        title: Text(l10n.confirmLanPairingCode),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(labelText: '6-digit code'),
+          decoration: InputDecoration(labelText: l10n.sixDigitCode),
           keyboardType: TextInputType.number,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Confirm'),
+            child: Text(l10n.confirm),
           ),
         ],
       );
@@ -1063,6 +1125,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       throw StateError('LAN pairing server did not bind a port');
     }
     final session = _pairing.createInvite(
+      uriScheme: actentPairingUriScheme,
       issuerDeviceId: widget.deviceId ?? 'local-device',
       issuerPublicKey: widget.publicKey ?? 'local-public-key',
       relayUrl: pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
@@ -1083,6 +1146,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
           widget.publicKey ?? 'local-public-key',
         ),
         port: pairingPort!,
+        serviceType: actentMdnsServiceName,
       );
       try {
         await advertiser.start();
@@ -1126,24 +1190,25 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _importPairingInvite() async {
+    final l10n = AppLocalizations.of(context)!;
     final values = await showDialog<(String, String)?>(
       context: context,
       builder: (dialogContext) {
         final inviteController = TextEditingController();
         final codeController = TextEditingController();
         return AlertDialog(
-          title: const Text('Add paired device'),
+          title: Text(l10n.addPairedDevice),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: inviteController,
-                decoration: const InputDecoration(labelText: 'Invitation URI'),
+                decoration: InputDecoration(labelText: l10n.invitationUri),
                 maxLines: 3,
               ),
               TextField(
                 controller: codeController,
-                decoration: const InputDecoration(labelText: '6-digit code'),
+                decoration: InputDecoration(labelText: l10n.sixDigitCode),
                 keyboardType: TextInputType.number,
               ),
             ],
@@ -1151,13 +1216,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(
                 dialogContext,
               ).pop((inviteController.text.trim(), codeController.text.trim())),
-              child: const Text('Confirm'),
+              child: Text(l10n.confirm),
             ),
           ],
         );
@@ -1168,12 +1233,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _acceptInvite(values.$1, values.$2);
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Pairing failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.pairingFailedWithError(error.toString()))),
+      );
     }
   }
 
   Future<void> _scanPairingInvite() async {
+    final l10n = AppLocalizations.of(context)!;
     final scan = widget.scanPairingQr;
     if (scan == null) return;
     final inviteUri = await scan(context);
@@ -1183,20 +1250,20 @@ class _ActentHomePageState extends State<ActentHomePage> {
       builder: (dialogContext) {
         final controller = TextEditingController();
         return AlertDialog(
-          title: const Text('Confirm pairing code'),
+          title: Text(l10n.confirmPairingCode),
           content: TextField(
             controller: controller,
-            decoration: const InputDecoration(labelText: '6-digit code'),
+            decoration: InputDecoration(labelText: l10n.sixDigitCode),
             keyboardType: TextInputType.number,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-              child: const Text('Confirm'),
+              child: Text(l10n.confirm),
             ),
           ],
         );
@@ -1207,13 +1274,17 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _acceptInvite(inviteUri, code.trim());
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Pairing failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.pairingFailedWithError(error.toString()))),
+      );
     }
   }
 
   Future<void> _acceptInvite(String value, String code) async {
-    final invite = PairingInvite.fromUri(value);
+    final invite = PairingInvite.fromUri(
+      value,
+      uriScheme: actentPairingUriScheme,
+    );
     final session = PairingSession(invite)
       ..accept(
         remoteDeviceId: invite.issuerDeviceId,
@@ -1253,6 +1324,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     PairingSession session,
     PairingAcceptance acceptance,
   ) async {
+    final l10n = AppLocalizations.of(context)!;
     if (!acceptance.verify(session.invite) || session.isTerminal) return false;
     try {
       if (!await _confirmPairingAcceptance(acceptance)) return false;
@@ -1304,27 +1376,28 @@ class _ActentHomePageState extends State<ActentHomePage> {
     } on Object catch (error) {
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Pairing confirmation failed: $error')),
+        SnackBar(content: Text(l10n.pairingFailedWithError(error.toString()))),
       );
       return false;
     }
   }
 
   Future<bool> _confirmPairingAcceptance(PairingAcceptance acceptance) async {
+    final l10n = AppLocalizations.of(context)!;
     if (!mounted) return false;
     final fingerprint = _publicKeyFingerprint(acceptance.publicKey);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Confirm new paired device'),
+        title: Text(l10n.confirmNewPairedDevice),
         content: SingleChildScrollView(
           child: ListBody(
             children: [
-              Text('Name: ${acceptance.displayName}'),
-              Text('Device ID: ${acceptance.deviceId}'),
-              Text('Platform: ${acceptance.platform}'),
+              Text(l10n.deviceName(acceptance.displayName)),
+              Text(l10n.deviceId(acceptance.deviceId)),
+              Text(l10n.platform(acceptance.platform)),
               const SizedBox(height: 12),
-              const Text('Public-key fingerprint:'),
+              Text(l10n.publicKeyFingerprint),
               SelectableText(fingerprint),
             ],
           ),
@@ -1332,11 +1405,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Reject'),
+            child: Text(l10n.reject),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Pair device'),
+            child: Text(l10n.pairDevice),
           ),
         ],
       ),
@@ -1414,19 +1487,22 @@ class _ActentHomePageState extends State<ActentHomePage> {
     await _loadRepositoryData(repository);
   }
 
-  Future<void> _showInviteText(String invite) => showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Pair device'),
-      content: SelectableText(invite),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: const Text('Close'),
-        ),
-      ],
-    ),
-  );
+  Future<void> _showInviteText(String invite) {
+    final l10n = AppLocalizations.of(context)!;
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.pairDevice),
+        content: SelectableText(invite),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(l10n.close),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _settingsPage(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -1435,16 +1511,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
       padding: const EdgeInsets.all(16),
       children: [
         ListTile(
-          leading: Icon(Icons.lock_outline),
-          title: Text(l10n.secrets),
-          subtitle: Text(l10n.secretsDescription),
-        ),
-        ListTile(
-          leading: Icon(Icons.sync_outlined),
-          title: Text(l10n.transport),
-          subtitle: Text(l10n.transportDescription),
-        ),
-        ListTile(
           leading: const Icon(Icons.cloud_outlined),
           title: Text(l10n.relayServer),
           subtitle: Text(
@@ -1452,11 +1518,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
             '${widget.relayAuthorizationConfigured ? ' · ${l10n.authorizationConfigured}' : ''}',
           ),
           onTap: _editRelaySettings,
-        ),
-        ListTile(
-          leading: Icon(Icons.delete_sweep_outlined),
-          title: Text(l10n.attachmentRetention),
-          subtitle: Text(l10n.attachmentRetentionDescription),
         ),
         ListTile(
           leading: const Icon(Icons.cleaning_services_outlined),
@@ -1539,6 +1600,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _editRelaySettings() async {
+    final l10n = AppLocalizations.of(context)!;
     final callback = widget.onRelaySettingsChanged;
     if (callback == null) return;
     final values = await showDialog<(String, String?)>(
@@ -1549,19 +1611,19 @@ class _ActentHomePageState extends State<ActentHomePage> {
         );
         final authorization = TextEditingController();
         return AlertDialog(
-          title: const Text('Relay settings'),
+          title: Text(l10n.relaySettingsTitle),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: server,
-                decoration: const InputDecoration(labelText: 'ntfy server URL'),
+                decoration: InputDecoration(labelText: l10n.ntfyServerUrl),
                 keyboardType: TextInputType.url,
               ),
               TextField(
                 controller: authorization,
-                decoration: const InputDecoration(
-                  labelText: 'Authorization (empty to clear)',
+                decoration: InputDecoration(
+                  labelText: l10n.authorizationEmptyToClear,
                 ),
                 obscureText: true,
               ),
@@ -1570,7 +1632,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop((
@@ -1579,7 +1641,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                     ? null
                     : authorization.text.trim(),
               )),
-              child: const Text('Save'),
+              child: Text(l10n.save),
             ),
           ],
         );
@@ -1590,34 +1652,38 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (server == null || !server.hasScheme || server.host.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Relay URL is invalid.')));
+          .showSnackBar(SnackBar(content: Text(l10n.invalidRelayUrl)));
       return;
     }
     try {
       await callback(server, values.$2);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Relay settings saved; restart Actent to reconnect.'),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.relaySettingsSaved)));
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Save failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.saveFailedWithError(error.toString()))),
+      );
     }
   }
 
   Future<void> _chooseRetention() async {
+    final l10n = AppLocalizations.of(context)!;
     final selected = await showDialog<AttachmentRetention>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
-        title: const Text('Attachment retention'),
+        title: Text(l10n.attachmentRetentionTitle),
         children: [
           for (final value in AttachmentRetention.values)
             SimpleDialogOption(
               onPressed: () => Navigator.of(dialogContext).pop(value),
-              child: Text(value.name),
+              child: Text(switch (value) {
+                AttachmentRetention.oneDay => l10n.retentionOneDay,
+                AttachmentRetention.sevenDays => l10n.retentionSevenDays,
+                AttachmentRetention.oneMonth => l10n.retentionOneMonth,
+                AttachmentRetention.forever => l10n.retentionForever,
+              }),
             ),
         ],
       ),
@@ -1630,23 +1696,24 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final deleted = await manager.purgeExpired(retention: selected);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Removed $deleted expired message(s).')),
+      SnackBar(content: Text(l10n.removedExpiredMessages(deleted))),
     );
     final repository = widget.repository;
     if (repository != null) await _loadRepositoryData(repository);
   }
 
   Future<void> _choosePacketDedupRetention() async {
+    final l10n = AppLocalizations.of(context)!;
     final selected = await showDialog<Duration>(
       context: context,
       builder: (dialogContext) => SimpleDialog(
-        title: const Text('Packet deduplication retention'),
+        title: Text(l10n.packetDeduplicationRetentionTitle),
         children: [
           for (final days in const [1, 7, 30, 90])
             SimpleDialogOption(
               onPressed: () =>
                   Navigator.of(dialogContext).pop(Duration(days: days)),
-              child: Text('$days day(s)'),
+              child: Text(l10n.packetRetentionDays(days)),
             ),
         ],
       ),
@@ -1655,14 +1722,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
     setState(() => _packetDedupRetention = selected);
     await widget.onPacketDedupRetentionChanged?.call(selected);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Deduplication retention saved; restart to apply.'),
-      ),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.deduplicationRetentionSaved)));
   }
 
   Future<void> _exportConfiguration() async {
+    final l10n = AppLocalizations.of(context)!;
     final repository = widget.repository;
     if (repository == null) return;
     final json = const JsonEncoder.withIndent('  ')
@@ -1671,7 +1737,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Export configuration'),
+        title: Text(l10n.exportConfigurationTitle),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(child: SelectableText(json)),
@@ -1679,7 +1745,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Close'),
+            child: Text(l10n.close),
           ),
         ],
       ),
@@ -1687,13 +1753,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _importConfiguration() async {
+    final l10n = AppLocalizations.of(context)!;
     final repository = widget.repository;
     if (repository == null) return;
     final controller = TextEditingController();
     final json = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Import configuration'),
+        title: Text(l10n.importConfigurationTitle),
         content: SizedBox(
           width: 560,
           child: TextField(
@@ -1707,11 +1774,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Import'),
+            child: Text(l10n.import),
           ),
         ],
       ),
@@ -1723,8 +1790,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _loadRepositoryData(repository);
     } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Import failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.importFailedWithError(error.toString()))),
+      );
     }
   }
 }

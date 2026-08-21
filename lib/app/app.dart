@@ -13,6 +13,7 @@ import '../features/actent_core/attachment_retention.dart';
 import '../features/actent_platform/android_share_bridge.dart';
 import '../features/work/desktop/desktop_script_runner.dart';
 import '../features/work/work_runner.dart';
+import 'pairing_qr_presenter.dart';
 
 class DartloomApp extends StatefulWidget {
   const DartloomApp({
@@ -124,8 +125,7 @@ class _DartloomAppState extends State<DartloomApp> {
           defaultTargetPlatform == TargetPlatform.linux ||
           defaultTargetPlatform == TargetPlatform.macOS,
       desktopSecrets: widget.desktopSecrets,
-      showPairingQr: (context, invite) =>
-          FlutterQrCodePresenter(context).show(invite),
+      showPairingQr: showActentPairingQr,
       scanPairingQr:
           defaultTargetPlatform == TargetPlatform.android ||
               defaultTargetPlatform == TargetPlatform.iOS

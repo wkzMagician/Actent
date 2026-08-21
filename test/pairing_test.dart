@@ -8,6 +8,7 @@ void main() {
   test('encodes an invite as a portable URI without private credentials', () {
     final coordinator = PairingCoordinator(random: Random(1));
     final session = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'desktop',
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
@@ -18,7 +19,10 @@ void main() {
       issuerCertificateSha256: 'certificate-fingerprint',
     );
 
-    final decoded = PairingInvite.fromUri(session.invite.toUri());
+    final decoded = PairingInvite.fromUri(
+      session.invite.toUri(),
+      uriScheme: 'actent',
+    );
     expect(decoded.nonce, session.invite.nonce);
     expect(decoded.issuerLanHost, '192.168.1.10');
     expect(decoded.issuerLanPort, 43100);
@@ -31,6 +35,7 @@ void main() {
   test('requires both acceptance and matching short-code confirmation', () {
     final coordinator = PairingCoordinator(random: Random(2));
     final session = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'desktop',
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
@@ -51,6 +56,7 @@ void main() {
     var now = DateTime.utc(2026, 1, 1);
     final coordinator = PairingCoordinator(clock: () => now, random: Random(3));
     final session = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'desktop',
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
@@ -78,6 +84,7 @@ void main() {
   test('relay acceptance proof round-trips and rejects a different invite', () {
     final coordinator = PairingCoordinator(random: Random(4));
     final session = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'desktop',
       issuerPublicKey: 'desktop-key',
       relayUrl: 'https://ntfy.example',
@@ -104,6 +111,7 @@ void main() {
     final decoded = PairingAcceptance.fromJson(acceptance.toJson());
     expect(decoded.verify(session.invite), isTrue);
     final other = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'other',
       issuerPublicKey: 'other-key',
       relayUrl: 'https://ntfy.example',
@@ -115,6 +123,7 @@ void main() {
   test('LAN pairing handler verifies acceptance before confirming', () async {
     final coordinator = PairingCoordinator(random: Random(5));
     final session = coordinator.createInvite(
+      uriScheme: 'actent',
       issuerDeviceId: 'desktop',
       issuerPublicKey: 'desktop-key',
       relayUrl: 'https://ntfy.example',
@@ -134,7 +143,10 @@ void main() {
       'version': 1,
     });
     expect(
-      PairingInvite.fromUri(inviteResponse['inviteUri'] as String).nonce,
+      PairingInvite.fromUri(
+        inviteResponse['inviteUri'] as String,
+        uriScheme: 'actent',
+      ).nonce,
       session.invite.nonce,
     );
     final request = PairingAcceptance(

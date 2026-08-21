@@ -152,4 +152,223 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lanNoDevices => 'No pairing-enabled devices were found.';
+
+  @override
+  String get chooseWork => 'Choose Work';
+
+  @override
+  String get chooseWorkDescription =>
+      'Select where this shared content should go.';
+
+  @override
+  String get thisDevice => 'This device';
+
+  @override
+  String get remoteDevice => 'Remote device';
+
+  @override
+  String get nullWork => 'Null — store locally';
+
+  @override
+  String get discard => 'Discard';
+
+  @override
+  String get close => 'Close';
+
+  @override
+  String get runAgain => 'Run again';
+
+  @override
+  String get cancelPendingRequests => 'Cancel pending requests';
+
+  @override
+  String get deleteMessage => 'Delete message';
+
+  @override
+  String get pairDevice => 'Pair device';
+
+  @override
+  String get addWork => 'Add Work';
+
+  @override
+  String get edit => 'Edit';
+
+  @override
+  String get enable => 'Enable';
+
+  @override
+  String get disable => 'Disable';
+
+  @override
+  String get delete => 'Delete';
+
+  @override
+  String get addJavaScriptWork => 'Add JavaScript Work';
+
+  @override
+  String get editJavaScriptWork => 'Edit JavaScript Work';
+
+  @override
+  String get addScriptWork => 'Add Script Work';
+
+  @override
+  String get editScriptWork => 'Edit Script Work';
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get javaScriptBody => 'JavaScript body';
+
+  @override
+  String get allowedNetworkHosts => 'Allowed network hosts (one per line)';
+
+  @override
+  String get absoluteExecutablePath => 'Absolute executable path';
+
+  @override
+  String get argumentsOnePerLine => 'Arguments (one per line)';
+
+  @override
+  String get deleteWorkTitle => 'Delete Work?';
+
+  @override
+  String deleteWorkMessage(Object name) {
+    return 'Delete “$name” and cancel pending requests?';
+  }
+
+  @override
+  String get relaySettingsTitle => 'Relay settings';
+
+  @override
+  String saveFailedWithError(Object error) {
+    return 'Save failed: $error';
+  }
+
+  @override
+  String get attachmentRetentionTitle => 'Attachment retention';
+
+  @override
+  String removedExpiredMessages(Object count) {
+    return 'Removed $count expired message(s).';
+  }
+
+  @override
+  String get packetDeduplicationRetentionTitle =>
+      'Packet deduplication retention';
+
+  @override
+  String get deduplicationRetentionSaved =>
+      'Deduplication retention saved; restart to apply.';
+
+  @override
+  String get exportConfigurationTitle => 'Export configuration';
+
+  @override
+  String get importConfigurationTitle => 'Import configuration';
+
+  @override
+  String get import => 'Import';
+
+  @override
+  String importFailedWithError(Object error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String get removePairedDeviceTitle => 'Remove paired device?';
+
+  @override
+  String removePairedDeviceMessage(Object name) {
+    return 'Remove $name and its remote Work catalog? Existing Inbox history is kept.';
+  }
+
+  @override
+  String get remove => 'Remove';
+
+  @override
+  String get discoverOnLan => 'Discover on LAN';
+
+  @override
+  String get pasteInvitation => 'Paste invitation';
+
+  @override
+  String get scanQrInvitation => 'Scan QR invitation';
+
+  @override
+  String get nearbyDevices => 'Nearby Actent devices';
+
+  @override
+  String get confirmLanPairingCode => 'Confirm LAN pairing code';
+
+  @override
+  String get confirmPairingCode => 'Confirm pairing code';
+
+  @override
+  String get sixDigitCode => '6-digit code';
+
+  @override
+  String get confirm => 'Confirm';
+
+  @override
+  String get addPairedDevice => 'Add paired device';
+
+  @override
+  String get invitationUri => 'Invitation URI';
+
+  @override
+  String pairingFailedWithError(Object error) {
+    return 'Pairing failed: $error';
+  }
+
+  @override
+  String get confirmNewPairedDevice => 'Confirm new paired device';
+
+  @override
+  String deviceName(Object name) {
+    return 'Name: $name';
+  }
+
+  @override
+  String deviceId(Object id) {
+    return 'Device ID: $id';
+  }
+
+  @override
+  String platform(Object platform) {
+    return 'Platform: $platform';
+  }
+
+  @override
+  String get publicKeyFingerprint => 'Public-key fingerprint:';
+
+  @override
+  String get reject => 'Reject';
+
+  @override
+  String get retentionOneDay => '1 day';
+
+  @override
+  String get retentionSevenDays => '7 days';
+
+  @override
+  String get retentionOneMonth => '1 month';
+
+  @override
+  String get retentionForever => 'Forever';
+
+  @override
+  String packetRetentionDays(Object days) {
+    return '$days day(s)';
+  }
+
+  @override
+  String get scanPairingQrDescription =>
+      'Scan this QR code to pair the device.';
+
+  @override
+  String get copyInvitationLink => 'Copy invitation link';
+
+  @override
+  String get invitationLinkCopied => 'Invitation link copied.';
 }

@@ -14,6 +14,7 @@ import 'app/object_store_factory.dart';
 import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
+import 'app/pairing_configuration.dart';
 import 'features/actent_core/attachment_retention.dart';
 import 'features/actent_core/device_identity.dart';
 import 'features/actent_core/actent_models.dart';
@@ -190,7 +191,9 @@ Future<DartloomApp> _createApplication() async {
       lanPort: transport.lanPort,
       lanCertificateSha256: transport.lanCertificateSha256,
       lanServerConfig: lanServerConfig,
-      pairingDiscovery: MdnsPairingDiscovery(),
+      pairingDiscovery: MdnsPairingDiscovery(
+        serviceName: actentMdnsServiceName,
+      ),
       pairingHandshake: PairingRelayHandshake(
         server: relay.server,
         authorization: relay.authorization,
