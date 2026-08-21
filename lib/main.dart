@@ -1,5 +1,10 @@
+import 'dart:async';
+
+import 'package:dartloom_resident/dartloom_resident.dart';
+import 'package:dartloom_singleton/dartloom_singleton.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:dartloom_storage/dartloom_storage.dart';
 import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
 import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_preferences.dart';
 
@@ -26,117 +31,218 @@ void main() {
   runApp(const _StartupGate());
 }
 
+const _startupTimeout = Duration(seconds: 30);
+
+Future<T> _startupStep<T>(Future<T> operation, String name) =>
+    operation.timeout(
+      _startupTimeout,
+      onTimeout: () => throw TimeoutException(
+        'Actent startup timed out while $name.',
+        _startupTimeout,
+      ),
+    );
+
+Future<void> _disposeStartupResources({
+  required SingleInstanceService? singleInstance,
+  required ActentTransportService? transport,
+  required ResidentService? resident,
+  required ObjectStore? objectStore,
+}) async {
+  try {
+    await transport?.stop().timeout(const Duration(milliseconds: 600));
+  } on Object {
+    // Cleanup must not hide the original startup error.
+  }
+  try {
+    await resident?.dispose();
+  } on Object {
+    // Cleanup must not hide the original startup error.
+  }
+  try {
+    await singleInstance?.dispose();
+  } on Object {
+    // Cleanup must not hide the original startup error.
+  }
+  try {
+    await objectStore?.close();
+  } on Object {
+    // Cleanup must not hide the original startup error.
+  }
+}
+
 Future<DartloomApp> _createApplication() async {
   final singleInstance = createSingleInstanceService();
-  await singleInstance?.ensureSingleInstance();
-  final appSettings = SharedPreferencesSettingsStore();
-  final secretSettings = const SecureSettingsStore();
-  final objectStore = await openActentObjectStore();
-  final savedLocale = await appSettings.read('app.locale');
-  final initialLocale = _localeFromCode(
-    savedLocale is String ? savedLocale : null,
-  );
-  final repository = createActentRepository(objectStore);
-  final secretRepository = ActentSecretRepository(secretSettings);
-  final identity = await DeviceIdentityRepository(secretRepository)
-      .loadOrCreate();
-  final relay = await ActentRelaySettings.load(secretRepository);
-  final attachmentRoot = await resolveActentAttachmentDirectory();
-  final lanServerConfig = await ActentLanServerConfig.fromEnvironment();
-  final retentionPreferences = AttachmentRetentionPreferences(secretRepository);
-  final attachmentRetention = await retentionPreferences.load();
-  final dedupPreferences = PacketDedupRetentionPreferences(secretRepository);
-  final packetDedupRetention = await dedupPreferences.load();
-  final queue = WorkQueueCoordinator(repository: repository);
-  final transport = ActentTransportService(
-    deviceId: identity.deviceId,
-    identity: identity.packetIdentity,
-    repository: repository,
-    relay: relay,
-    attachmentRoot: attachmentRoot,
-    seenPacketRetention: packetDedupRetention,
-    lanServerConfig: lanServerConfig,
-  );
-  final router = ActentRouter(
-    deviceId: identity.deviceId,
-    repository: repository,
-    connection: transport,
-    queue: queue,
-  );
-  await transport.start(router);
-  await repository.saveDevice(
-    Device(
-      id: identity.deviceId,
-      displayName: 'Actent ${defaultTargetPlatform.name}',
-      platform: defaultTargetPlatform.name,
-      publicKey: identity.publicKey,
-      endpoint: {
-        'relayUrl': relay.server.toString(),
-        'relayTopic': relay.topic,
-        if (transport.lanHost != null) 'lanHost': transport.lanHost,
-        if (transport.lanPort != null) 'lanPort': transport.lanPort,
-        if (transport.lanCertificateSha256 != null)
-          'certificateSha256': transport.lanCertificateSha256,
-      },
-    ),
-  );
-  final resident = await createResidentService();
-  await configureResidentMenu(
-    resident: resident,
-    onExitRequested: () async {
-      try {
-        await transport.stop().timeout(const Duration(milliseconds: 600));
-      } on Object {
-        // Exit must remain responsive even if a network subscription is slow.
-      }
-      await singleInstance?.dispose();
-      await resident?.dispose();
-      await objectStore.close();
-      return true;
-    },
-  );
-  return DartloomApp(
-    locale: initialLocale,
-    onLocaleChanged: (locale) =>
-        appSettings.write('app.locale', locale.languageCode),
-    repository: repository,
-    deviceId: identity.deviceId,
-    publicKey: identity.publicKey,
-    relayTopic: relay.topic,
-    relayServer: relay.server,
-    relayAuthorizationConfigured: relay.authorization != null,
-    onRelaySettingsChanged: (server, authorization) async {
-      await secretRepository.write('relay.server', server.toString());
-      if (authorization == null || authorization.isEmpty) {
-        await secretRepository.remove('relay.authorization');
-      } else {
-        await secretRepository.write('relay.authorization', authorization);
-      }
-    },
-    lanHost: transport.lanHost,
-    lanPort: transport.lanPort,
-    lanCertificateSha256: transport.lanCertificateSha256,
-    lanServerConfig: lanServerConfig,
-    pairingDiscovery: MdnsPairingDiscovery(),
-    pairingHandshake: PairingRelayHandshake(
-      server: relay.server,
-      authorization: relay.authorization,
-    ),
-    attachmentRetention: AttachmentRetentionManager(
+  ObjectStore? objectStore;
+  ActentTransportService? transport;
+  ResidentService? resident;
+  try {
+    if (singleInstance != null) {
+      await _startupStep(
+        singleInstance.ensureSingleInstance(),
+        'claiming the single-instance lock',
+      );
+    }
+    final appSettings = SharedPreferencesSettingsStore();
+    final secretSettings = const SecureSettingsStore();
+    final openedObjectStore = await _startupStep(
+      openActentObjectStore(),
+      'opening local storage',
+    );
+    objectStore = openedObjectStore;
+    final savedLocale = await _startupStep(
+      appSettings.read('app.locale'),
+      'reading preferences',
+    );
+    final initialLocale = _localeFromCode(
+      savedLocale is String ? savedLocale : null,
+    );
+    final repository = createActentRepository(openedObjectStore);
+    final secretRepository = ActentSecretRepository(secretSettings);
+    final identity = await _startupStep(
+      DeviceIdentityRepository(secretRepository).loadOrCreate(),
+      'loading device identity',
+    );
+    final relay = await _startupStep(
+      ActentRelaySettings.load(secretRepository),
+      'loading relay settings',
+    );
+    final attachmentRoot = await _startupStep(
+      resolveActentAttachmentDirectory(),
+      'preparing attachments',
+    );
+    final lanServerConfig = await _startupStep(
+      ActentLanServerConfig.fromEnvironment(),
+      'preparing LAN settings',
+    );
+    final retentionPreferences = AttachmentRetentionPreferences(
+      secretRepository,
+    );
+    final attachmentRetention = await _startupStep(
+      retentionPreferences.load(),
+      'loading attachment retention settings',
+    );
+    final dedupPreferences = PacketDedupRetentionPreferences(secretRepository);
+    final packetDedupRetention = await _startupStep(
+      dedupPreferences.load(),
+      'loading packet retention settings',
+    );
+    final queue = WorkQueueCoordinator(repository: repository);
+    transport = ActentTransportService(
+      deviceId: identity.deviceId,
+      identity: identity.packetIdentity,
       repository: repository,
-      root: attachmentRoot,
-    ),
-    initialAttachmentRetention: attachmentRetention,
-    onAttachmentRetentionChanged: retentionPreferences.save,
-    initialPacketDedupRetention: packetDedupRetention,
-    onPacketDedupRetentionChanged: dedupPreferences.save,
-    router: router,
-    queue: queue,
-    desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
-    shareBridge: defaultTargetPlatform == TargetPlatform.android
-        ? AndroidShareBridge()
-        : null,
-  );
+      relay: relay,
+      attachmentRoot: attachmentRoot,
+      seenPacketRetention: packetDedupRetention,
+      lanServerConfig: lanServerConfig,
+    );
+    final router = ActentRouter(
+      deviceId: identity.deviceId,
+      repository: repository,
+      connection: transport,
+      queue: queue,
+    );
+    await _startupStep(transport.start(router), 'starting transport');
+    await _startupStep(
+      repository.saveDevice(
+        Device(
+          id: identity.deviceId,
+          displayName: 'Actent ${defaultTargetPlatform.name}',
+          platform: defaultTargetPlatform.name,
+          publicKey: identity.publicKey,
+          endpoint: {
+            'relayUrl': relay.server.toString(),
+            'relayTopic': relay.topic,
+            if (transport.lanHost != null) 'lanHost': transport.lanHost,
+            if (transport.lanPort != null) 'lanPort': transport.lanPort,
+            if (transport.lanCertificateSha256 != null)
+              'certificateSha256': transport.lanCertificateSha256,
+          },
+        ),
+      ),
+      'saving local device information',
+    );
+    resident = await _startupStep(
+      createResidentService(),
+      'initializing the resident service',
+    );
+    final activeTransport = transport;
+    final activeObjectStore = openedObjectStore;
+    final application = DartloomApp(
+      locale: initialLocale,
+      onLocaleChanged: (locale) =>
+          appSettings.write('app.locale', locale.languageCode),
+      repository: repository,
+      deviceId: identity.deviceId,
+      publicKey: identity.publicKey,
+      relayTopic: relay.topic,
+      relayServer: relay.server,
+      relayAuthorizationConfigured: relay.authorization != null,
+      onRelaySettingsChanged: (server, authorization) async {
+        await secretRepository.write('relay.server', server.toString());
+        if (authorization == null || authorization.isEmpty) {
+          await secretRepository.remove('relay.authorization');
+        } else {
+          await secretRepository.write('relay.authorization', authorization);
+        }
+      },
+      lanHost: transport.lanHost,
+      lanPort: transport.lanPort,
+      lanCertificateSha256: transport.lanCertificateSha256,
+      lanServerConfig: lanServerConfig,
+      pairingDiscovery: MdnsPairingDiscovery(),
+      pairingHandshake: PairingRelayHandshake(
+        server: relay.server,
+        authorization: relay.authorization,
+      ),
+      attachmentRetention: AttachmentRetentionManager(
+        repository: repository,
+        root: attachmentRoot,
+      ),
+      initialAttachmentRetention: attachmentRetention,
+      onAttachmentRetentionChanged: retentionPreferences.save,
+      initialPacketDedupRetention: packetDedupRetention,
+      onPacketDedupRetentionChanged: dedupPreferences.save,
+      router: router,
+      queue: queue,
+      desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
+      shareBridge: defaultTargetPlatform == TargetPlatform.android
+          ? AndroidShareBridge()
+          : null,
+    );
+    // Resident/tray setup is optional. Do not hold the first Flutter frame on
+    // a platform plugin; a tray failure must not make the app look blank.
+    unawaited(
+      configureResidentMenu(
+        resident: resident,
+        onExitRequested: () async {
+          try {
+            await activeTransport.stop().timeout(
+              const Duration(milliseconds: 600),
+            );
+          } on Object {
+            // Exit must remain responsive even if a network subscription is slow.
+          }
+          await singleInstance?.dispose();
+          await resident?.dispose();
+          await activeObjectStore.close();
+          return true;
+        },
+      ).catchError((error, stackTrace) {
+        debugPrint('Failed to configure the resident menu: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }),
+    );
+    return application;
+  } on Object {
+    await _disposeStartupResources(
+      singleInstance: singleInstance,
+      transport: transport,
+      resident: resident,
+      objectStore: objectStore,
+    );
+    rethrow;
+  }
 }
 
 Locale? _localeFromCode(String? code) {
@@ -181,9 +287,7 @@ class _StartupLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
+    title: 'Actent',
     home: Scaffold(
       body: Center(
         child: Column(
@@ -192,12 +296,12 @@ class _StartupLoading extends StatelessWidget {
             const CircularProgressIndicator(),
             const SizedBox(height: 24),
             Text(
-              AppLocalizations.of(context)!.startupLoading,
+              'Starting Actent…',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              AppLocalizations.of(context)!.startupPreparing,
+              'Preparing local services',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
@@ -214,9 +318,7 @@ class _StartupError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-    localizationsDelegates: AppLocalizations.localizationsDelegates,
-    supportedLocales: AppLocalizations.supportedLocales,
+    title: 'Actent',
     home: Scaffold(
       body: Center(
         child: Padding(
@@ -227,7 +329,7 @@ class _StartupError extends StatelessWidget {
               const Icon(Icons.error_outline, size: 56),
               const SizedBox(height: 16),
               Text(
-                AppLocalizations.of(context)!.startupFailed,
+                'Actent failed to start',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
