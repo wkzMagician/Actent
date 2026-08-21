@@ -10,7 +10,11 @@ case "$mode" in
     ;;
 esac
 
-configuration="${mode^}"
+case "$mode" in
+  debug) configuration="Debug" ;;
+  profile) configuration="Profile" ;;
+  release) configuration="Release" ;;
+esac
 targets="${DARTLOOM_NATIVE_TARGETS:-}"
 if [[ -z "$targets" ]]; then
   exit 0
