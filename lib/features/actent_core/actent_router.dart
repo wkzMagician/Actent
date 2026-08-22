@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cryptography/cryptography.dart';
@@ -141,6 +142,10 @@ class ActentRouter {
   final WorkCatalog? catalog;
   final Map<String, WorkCatalog> _receivedCatalogs = {};
   final Map<String, _PublishedCatalog> _publishedCatalogs = {};
+  final StreamController<void> _repositoryUpdates =
+      StreamController<void>.broadcast();
+
+  Stream<void> get repositoryUpdates => _repositoryUpdates.stream;
 
   Future<void> _forwardReceipt(WorkReceipt receipt) async {
     final request = await repository.getRequest(receipt.requestId);
@@ -474,6 +479,58 @@ class ActentRouter {
       revision: revision,
       works: works,
     );
+  }
+
+  /// Shares the current device metadata with an already authenticated peer.
+  /// Pairing invitations cannot be updated after they are issued, so this
+  /// keeps device names and endpoints current after a rename or app update.
+  Future<void> sendDeviceUpdate(String recipientId) async {
+    final device = await repository.getDevice(deviceId);
+    if (device == null) {
+      throw StateError('local device is unavailable');
+    }
+    await connection.send(
+      recipientId: recipientId,
+      payload: <String, Object?>{
+        'type': 'deviceUpdate',
+        'schemaVersion': actentSchemaVersion,
+        'device': device.toJson(),
+      },
+    );
+  }
+
+  Future<void> receiveDeviceUpdate(
+    Object? value, {
+    required String authenticatedSenderId,
+  }) async {
+    final incoming = Device.fromJson(value);
+    if (incoming.id != authenticatedSenderId) {
+      throw const ActentValidationException(
+        'device.id',
+        'does not match authenticated packet sender',
+      );
+    }
+    final existing = await repository.getDevice(authenticatedSenderId);
+    if (existing == null ||
+        !existing.authorized ||
+        existing.publicKey != incoming.publicKey) {
+      throw const ActentValidationException(
+        'device',
+        'update is not authorized for the authenticated sender',
+      );
+    }
+    await repository.saveDevice(
+      Device(
+        id: incoming.id,
+        displayName: incoming.displayName,
+        platform: incoming.platform,
+        publicKey: incoming.publicKey,
+        endpoint: incoming.endpoint,
+        pairedAt: existing.pairedAt,
+        authorized: existing.authorized,
+      ),
+    );
+    _repositoryUpdates.add(null);
   }
 
   /// Sends only changes since the last catalog delivered to [recipientId].

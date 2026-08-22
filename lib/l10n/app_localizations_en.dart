@@ -368,6 +368,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get unnamedDevice => 'Unnamed device';
+
+  @override
   String platform(Object platform) {
     return 'Platform: $platform';
   }

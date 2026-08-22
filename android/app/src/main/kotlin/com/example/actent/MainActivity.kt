@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.os.Bundle
 import android.os.Parcelable
+import android.os.Build
 import android.provider.OpenableColumns
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -23,6 +24,7 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "actent/android_share"
+        private const val DEVICE_CHANNEL = "actent/device"
         private const val FILE_PROVIDER_SUFFIX = ".fileprovider"
     }
 
@@ -44,6 +46,11 @@ class MainActivity : FlutterActivity() {
             })
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result -> handleMethod(call, result) }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                if (call.method == "displayName") result.success(Build.MODEL)
+                else result.notImplemented()
+            }
         handleShareIntent(intent)
     }
 

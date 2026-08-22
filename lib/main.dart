@@ -22,6 +22,7 @@ import 'features/actent_core/attachment_retention.dart';
 import 'features/actent_core/device_identity.dart';
 import 'features/actent_core/actent_models.dart';
 import 'features/actent_core/actent_router.dart';
+import 'features/actent_core/actent_store.dart';
 import 'features/actent_core/actent_transport.dart';
 import 'features/pairing/pairing_relay.dart';
 import 'features/pairing/pairing.dart';
@@ -198,6 +199,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       ),
       'saving local device information',
     );
+    unawaited(_publishDeviceUpdate(router, repository, identity.deviceId));
     resident = await _startupStep(
       createResidentService(),
       'initializing the resident service',
@@ -317,6 +319,22 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       objectStore: objectStore,
     );
     rethrow;
+  }
+}
+
+Future<void> _publishDeviceUpdate(
+  ActentRouter router,
+  ActentRepository repository,
+  String localDeviceId,
+) async {
+  for (final device in await repository.listDevices()) {
+    if (!device.authorized || device.id == localDeviceId) continue;
+    try {
+      await router.sendDeviceUpdate(device.id);
+    } on Object {
+      // A peer that is temporarily offline receives the next update when the
+      // app starts or when pairing/catalog synchronization occurs.
+    }
   }
 }
 

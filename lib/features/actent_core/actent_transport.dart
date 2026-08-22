@@ -222,6 +222,11 @@ class ActentTransportService implements MessageConnection {
             payload['catalog'],
             ownerDeviceId: packet.senderId,
           );
+        case 'deviceUpdate':
+          await router.receiveDeviceUpdate(
+            payload['device'],
+            authenticatedSenderId: packet.senderId,
+          );
         case 'workRequest':
         case 'workReceipt':
           await router.receive(

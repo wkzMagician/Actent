@@ -746,6 +746,12 @@ abstract class AppLocalizations {
   /// **'Device ID: {id}'**
   String deviceId(Object id);
 
+  /// No description provided for @unnamedDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed device'**
+  String get unnamedDevice;
+
   /// No description provided for @platform.
   ///
   /// In en, this message translates to:

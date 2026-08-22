@@ -355,6 +355,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get unnamedDevice => '未命名设备';
+
+  @override
   String platform(Object platform) {
     return '平台：$platform';
   }

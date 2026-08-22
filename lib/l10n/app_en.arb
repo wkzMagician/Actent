@@ -108,6 +108,7 @@
   ,"confirmNewPairedDevice": "Confirm new paired device"
   ,"deviceName": "Name: {name}"
   ,"deviceId": "Device ID: {id}"
+  ,"unnamedDevice": "Unnamed device"
   ,"platform": "Platform: {platform}"
   ,"publicKeyFingerprint": "Public-key fingerprint:"
   ,"reject": "Reject"

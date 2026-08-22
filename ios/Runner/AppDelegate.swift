@@ -5,6 +5,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private static var openFilesChannel: FlutterMethodChannel?
   private static var iosWorkChannel: FlutterMethodChannel?
+  private static var deviceChannel: FlutterMethodChannel?
   private static var pendingOpenFiles: [String] = []
 
   override func application(
@@ -46,6 +47,18 @@ import UIKit
       UIApplication.shared.open(url, options: [:]) { opened in
         result(opened)
       }
+    }
+    let deviceChannel = FlutterMethodChannel(
+      name: "actent/device",
+      binaryMessenger: registrar.messenger()
+    )
+    Self.deviceChannel = deviceChannel
+    deviceChannel.setMethodCallHandler { call, result in
+      guard call.method == "displayName" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      result(UIDevice.current.name)
     }
   }
 

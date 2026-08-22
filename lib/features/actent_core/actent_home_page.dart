@@ -109,6 +109,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
   StreamSubscription<List<String>>? _externalFileSubscription;
+  StreamSubscription<void>? _repositoryUpdateSubscription;
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
   WorkQueueCoordinator? _queue;
@@ -160,6 +161,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _queue!.register('local-null', const NullWorkRunner());
       _queue!.addReceiptListener(_onReceipt);
       _loadRepositoryData(repository);
+      _repositoryUpdateSubscription = widget.router?.repositoryUpdates.listen(
+        (_) => unawaited(_loadRepositoryData(repository)),
+      );
     }
     _externalFileSubscription = widget.externalFilePaths?.listen(
       _importExternalFiles,
@@ -334,6 +338,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     _shareSubscription?.cancel();
     _pairingAcceptanceSubscription?.cancel();
     _externalFileSubscription?.cancel();
+    _repositoryUpdateSubscription?.cancel();
     unawaited(_closeLanPairing());
     super.dispose();
   }
@@ -1457,35 +1462,56 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
   }
 
-  Widget _devicesPage(BuildContext context) => _devices.isEmpty
-      ? ListView(
-          padding: const EdgeInsets.all(24),
-          children: [
-            _emptyPage(_pages(context)[2]),
-            const SizedBox(height: 12),
-            _pairingImportButton(),
-          ],
-        )
-      : ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            _pairingImportButton(),
-            const SizedBox(height: 8),
-            for (final device in _devices)
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.devices_outlined),
-                  title: Text(device.displayName),
-                  subtitle: Text('${device.platform} · ${device.id}'),
-                  trailing: Icon(
-                    device.authorized ? Icons.verified_outlined : Icons.block,
-                    color: device.authorized ? Colors.green : Colors.red,
+  Widget _devicesPage(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return _devices.isEmpty
+        ? ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              _emptyPage(_pages(context)[2]),
+              const SizedBox(height: 12),
+              _pairingImportButton(),
+            ],
+          )
+        : ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _pairingImportButton(),
+              const SizedBox(height: 8),
+              for (final device in _devices)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.devices_outlined),
+                    title: Text(_deviceLabel(device, l10n)),
+                    subtitle: Text(
+                      '${device.platform} · ${_shortDeviceId(device.id)}',
+                    ),
+                    trailing: Icon(
+                      device.authorized ? Icons.verified_outlined : Icons.block,
+                      color: device.authorized ? Colors.green : Colors.red,
+                    ),
+                    onTap: () => _unpairDevice(device),
                   ),
-                  onTap: () => _unpairDevice(device),
                 ),
-              ),
-          ],
-        );
+            ],
+          );
+  }
+
+  String _deviceLabel(Device device, AppLocalizations l10n) {
+    final name = device.displayName.trim();
+    if (name.isEmpty || name == device.id || name == 'Actent device') {
+      return l10n.unnamedDevice;
+    }
+    return name;
+  }
+
+  String _shortDeviceId(String deviceId) {
+    final value = deviceId.startsWith('device-')
+        ? deviceId.substring('device-'.length)
+        : deviceId;
+    if (value.length <= 12) return value;
+    return '${value.substring(0, 6)}…${value.substring(value.length - 4)}';
+  }
 
   Future<void> _unpairDevice(Device device) async {
     final l10n = AppLocalizations.of(context)!;
@@ -1960,6 +1986,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         );
       }
       await widget.router?.sendCatalogSnapshot(acceptance.deviceId);
+      await widget.router?.sendDeviceUpdate(acceptance.deviceId);
       await _loadRepositoryData(repository);
       final server = _lanPairingServer;
       if (server != null) {
@@ -2082,6 +2109,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final router = widget.router;
     if (router != null && authorized) {
       await router.sendCatalogSnapshot(invite.issuerDeviceId);
+      await router.sendDeviceUpdate(invite.issuerDeviceId);
     }
     await _loadRepositoryData(repository);
   }

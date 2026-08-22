@@ -108,6 +108,7 @@
   ,"confirmNewPairedDevice": "确认新配对设备"
   ,"deviceName": "名称：{name}"
   ,"deviceId": "设备 ID：{id}"
+  ,"unnamedDevice": "未命名设备"
   ,"platform": "平台：{platform}"
   ,"publicKeyFingerprint": "公钥指纹："
   ,"reject": "拒绝"
