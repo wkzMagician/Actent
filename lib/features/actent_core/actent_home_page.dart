@@ -900,107 +900,76 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _showAddWork() async {
     final l10n = AppLocalizations.of(context)!;
-    final workName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) {
-        final controller = TextEditingController();
-        return AlertDialog(
-          title: Text(l10n.addWork),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: InputDecoration(labelText: l10n.name),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text(l10n.cancel),
-            ),
-            FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogContext, controller.text.trim()),
-              child: Text(l10n.save),
-            ),
-          ],
-        );
-      },
-    );
-    if (workName == null || workName.isEmpty) return;
     if (!mounted) return;
-    _pendingWorkName = workName;
-    try {
-      final type = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(l10n.chooseWorkType),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+    final type = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.chooseWorkType),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: Text(l10n.nullWorkType),
+                onTap: () => Navigator.pop(dialogContext, 'null'),
+              ),
+              if (_supportsDesktopWork)
                 ListTile(
-                  leading: const Icon(Icons.archive_outlined),
-                  title: Text(l10n.nullWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'null'),
+                  leading: const Icon(Icons.terminal),
+                  title: Text(l10n.fileWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'file'),
                 ),
-                if (_supportsDesktopWork)
-                  ListTile(
-                    leading: const Icon(Icons.terminal),
-                    title: Text(l10n.fileWorkType),
-                    onTap: () => Navigator.pop(dialogContext, 'file'),
-                  ),
-                if (_supportsDesktopWork)
-                  ListTile(
-                    leading: const Icon(Icons.code),
-                    title: Text(l10n.shellWorkType),
-                    onTap: () => Navigator.pop(dialogContext, 'shell'),
-                  ),
+              if (_supportsDesktopWork)
                 ListTile(
-                  leading: const Icon(Icons.javascript),
-                  title: Text(l10n.javaScriptWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'javascript'),
+                  leading: const Icon(Icons.code),
+                  title: Text(l10n.shellWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'shell'),
                 ),
-                if (_isAndroid && widget.shareBridge != null)
-                  ListTile(
-                    leading: const Icon(Icons.apps_outlined),
-                    title: Text(l10n.applicationWorkType),
-                    onTap: () => Navigator.pop(dialogContext, 'application'),
-                  ),
-                if (_isIos)
-                  ListTile(
-                    leading: const Icon(Icons.apps_outlined),
-                    title: Text(l10n.applicationWorkType),
-                    onTap: () => Navigator.pop(dialogContext, 'iosApplication'),
-                  ),
-                if (_supportsNetworkWork)
-                  ListTile(
-                    leading: const Icon(Icons.http),
-                    title: Text(l10n.networkWorkType),
-                    onTap: () => Navigator.pop(dialogContext, 'network'),
-                  ),
-              ],
-            ),
+              ListTile(
+                leading: const Icon(Icons.javascript),
+                title: Text(l10n.javaScriptWorkType),
+                onTap: () => Navigator.pop(dialogContext, 'javascript'),
+              ),
+              if (_isAndroid && widget.shareBridge != null)
+                ListTile(
+                  leading: const Icon(Icons.apps_outlined),
+                  title: Text(l10n.applicationWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'application'),
+                ),
+              if (_isIos)
+                ListTile(
+                  leading: const Icon(Icons.apps_outlined),
+                  title: Text(l10n.applicationWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'iosApplication'),
+                ),
+              if (_supportsNetworkWork)
+                ListTile(
+                  leading: const Icon(Icons.http),
+                  title: Text(l10n.networkWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'network'),
+                ),
+            ],
           ),
         ),
-      );
-      switch (type) {
-        case 'null':
-          await _addNullWork();
-        case 'file':
-          await _addDesktopFileWork();
-        case 'shell':
-          await _addDesktopShellWork();
-        case 'javascript':
-          await _addWebJsWork();
-        case 'application':
-          await _addAndroidApplicationWork();
-        case 'iosApplication':
-          await _addIosApplicationWork();
-        case 'network':
-          await _addAndroidNetworkWork();
-      }
-    } finally {
-      _pendingWorkName = null;
+      ),
+    );
+    switch (type) {
+      case 'null':
+        await _addNullWork();
+      case 'file':
+        await _addDesktopFileWork();
+      case 'shell':
+        await _addDesktopShellWork();
+      case 'javascript':
+        await _addWebJsWork();
+      case 'application':
+        await _addAndroidApplicationWork();
+      case 'iosApplication':
+        await _addIosApplicationWork();
+      case 'network':
+        await _addAndroidNetworkWork();
     }
   }
 
