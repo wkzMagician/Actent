@@ -392,6 +392,19 @@ class ActentRouter {
     String? ownerDeviceId,
   }) async {
     final incoming = WorkCatalog.fromSnapshotJson(value);
+    final snapshot = Map<String, Object?>.from(value as Map);
+    final rawWorkflows = snapshot['workflows'];
+    final incomingWorkflows = rawWorkflows is List
+        ? rawWorkflows.map(Workflow.fromJson).toList()
+        : const <Workflow>[];
+    if (ownerDeviceId != null &&
+        incomingWorkflows.any(
+          (workflow) => workflow.ownerDeviceId != ownerDeviceId,
+        )) {
+      throw const WorkCatalogException(
+        'catalog contains a Workflow owned by another device',
+      );
+    }
     if (ownerDeviceId != null &&
         incoming.works.any((work) => work.ownerDeviceId != ownerDeviceId)) {
       throw const WorkCatalogException(
@@ -415,6 +428,17 @@ class ActentRouter {
         await repository.deleteWork(workId);
       }
     }
+    final existingWorkflows = await repository.listWorkflows();
+    for (final workflow in incomingWorkflows) {
+      await repository.saveWorkflow(workflow);
+    }
+    for (final workflow in existingWorkflows.where(
+      (workflow) => workflow.ownerDeviceId == ownerDeviceId,
+    )) {
+      if (!incomingWorkflows.any((item) => item.id == workflow.id)) {
+        await repository.deleteWorkflow(workflow.id);
+      }
+    }
     _repositoryUpdates.add(null);
   }
 
@@ -432,6 +456,10 @@ class ActentRouter {
       throw const WorkCatalogException('delta upserts/removals are invalid');
     }
     final upserts = rawUpserts.map(Work.fromJson).toList();
+    final rawWorkflowUpserts = json['workflowUpserts'];
+    final workflowUpserts = rawWorkflowUpserts is List
+        ? rawWorkflowUpserts.map(Workflow.fromJson).toList()
+        : const <Workflow>[];
     if (ownerDeviceId != null &&
         upserts.any((work) => work.ownerDeviceId != ownerDeviceId)) {
       throw const WorkCatalogException(
@@ -453,6 +481,28 @@ class ActentRouter {
     );
     for (final work in upserts) {
       await repository.saveWork(work);
+    }
+    for (final workflow in workflowUpserts) {
+      if (ownerDeviceId != null && workflow.ownerDeviceId != ownerDeviceId) {
+        throw const WorkCatalogException(
+          'catalog workflow is owned by another device',
+        );
+      }
+      await repository.saveWorkflow(workflow);
+    }
+    final rawRemovedWorkflows = json['removedWorkflowIds'];
+    if (rawRemovedWorkflows is List) {
+      for (final id in rawRemovedWorkflows) {
+        if (id is! String || id.isEmpty) {
+          throw const WorkCatalogException(
+            'removed workflow IDs must be strings',
+          );
+        }
+        final workflow = await repository.getWorkflow(id);
+        if (workflow?.ownerDeviceId == ownerDeviceId) {
+          await repository.deleteWorkflow(id);
+        }
+      }
     }
     for (final workId in removed) {
       final existing = await repository.getWork(workId);
@@ -478,12 +528,16 @@ class ActentRouter {
         'catalog': <String, Object?>{
           'revision': revision,
           'works': works.map((work) => work.toCatalogJson()).toList(),
+          'workflows': (await _ownedWorkflows())
+              .map((workflow) => workflow.toJson())
+              .toList(),
         },
       },
     );
     _publishedCatalogs[recipientId] = _PublishedCatalog(
       revision: revision,
       works: works,
+      workflows: await _ownedWorkflows(),
     );
   }
 
@@ -580,6 +634,7 @@ class ActentRouter {
       return;
     }
     final current = await _ownedWorks();
+    final currentWorkflows = await _ownedWorkflows();
     final previousById = {for (final work in previous.works) work.id: work};
     final currentById = {for (final work in current) work.id: work};
     final upserts = current
@@ -592,7 +647,28 @@ class ActentRouter {
     final removed = previousById.keys
         .where((workId) => !currentById.containsKey(workId))
         .toList(growable: false);
-    if (upserts.isEmpty && removed.isEmpty) return;
+    final previousWorkflowById = {
+      for (final workflow in previous.workflows) workflow.id: workflow,
+    };
+    final currentWorkflowById = {
+      for (final workflow in currentWorkflows) workflow.id: workflow,
+    };
+    final workflowUpserts = currentWorkflows
+        .where((workflow) {
+          final old = previousWorkflowById[workflow.id];
+          return old == null ||
+              jsonEncode(old.toJson()) != jsonEncode(workflow.toJson());
+        })
+        .toList(growable: false);
+    final removedWorkflowIds = previousWorkflowById.keys
+        .where((id) => !currentWorkflowById.containsKey(id))
+        .toList(growable: false);
+    if (upserts.isEmpty &&
+        removed.isEmpty &&
+        workflowUpserts.isEmpty &&
+        removedWorkflowIds.isEmpty) {
+      return;
+    }
     final nextRevision = previous.revision + 1;
     await connection.send(
       recipientId: recipientId,
@@ -604,18 +680,28 @@ class ActentRouter {
           'nextRevision': nextRevision,
           'upserts': upserts.map((work) => work.toCatalogJson()).toList(),
           'removedWorkIds': removed,
+          'workflowUpserts': workflowUpserts
+              .map((item) => item.toJson())
+              .toList(),
+          'removedWorkflowIds': removedWorkflowIds,
         },
       },
     );
     _publishedCatalogs[recipientId] = _PublishedCatalog(
       revision: nextRevision,
       works: current,
+      workflows: currentWorkflows,
     );
   }
 
   Future<List<Work>> _ownedWorks() async => (await repository.listWorks())
       .where((work) => work.ownerDeviceId == deviceId)
       .toList(growable: false);
+
+  Future<List<Workflow>> _ownedWorkflows() async =>
+      (await repository.listWorkflows())
+          .where((workflow) => workflow.ownerDeviceId == deviceId)
+          .toList(growable: false);
 
   WorkCatalog _catalogFor(String? ownerDeviceId) {
     final localCatalog = catalog;
@@ -657,9 +743,14 @@ int _requiredInt(Object? value, String field) {
 }
 
 class _PublishedCatalog {
-  _PublishedCatalog({required this.revision, required Iterable<Work> works})
-    : works = List<Work>.unmodifiable(works);
+  _PublishedCatalog({
+    required this.revision,
+    required Iterable<Work> works,
+    required Iterable<Workflow> workflows,
+  }) : works = List<Work>.unmodifiable(works),
+       workflows = List<Workflow>.unmodifiable(workflows);
 
   final int revision;
   final List<Work> works;
+  final List<Workflow> workflows;
 }
