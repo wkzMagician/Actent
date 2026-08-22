@@ -334,6 +334,38 @@ void main() {
       expect((await repository.getWork(work.id))!.revision, 2);
     });
 
+    test('unpairing notifies the peer and removes its catalog', () async {
+      final connection = FakeMessageConnection();
+      final router = ActentRouter(
+        deviceId: 'desktop',
+        repository: repository,
+        connection: connection,
+        queue: WorkQueueCoordinator(repository: repository),
+      );
+      final peerWork = Work(
+        id: 'phone-work',
+        revision: 1,
+        name: 'Phone Work',
+        ownerDeviceId: 'phone',
+      );
+      await repository.saveDevice(
+        Device(
+          id: 'phone',
+          displayName: 'Phone',
+          platform: 'ios',
+          publicKey: 'phone-key',
+        ),
+      );
+      await repository.saveWork(peerWork);
+
+      await router.unpair('phone');
+
+      expect(connection.sent.single.recipientId, 'phone');
+      expect(connection.sent.single.payload['type'], 'pairingRemoved');
+      expect(await repository.getDevice('phone'), isNull);
+      expect(await repository.getWork(peerWork.id), isNull);
+    });
+
     test(
       'publishes a catalog delta after establishing a snapshot baseline',
       () async {
@@ -400,7 +432,10 @@ void main() {
       await queue.enqueue(work, request);
       await pumpEventQueue();
 
-      expect(receipts.single.status, WorkReceiptStatus.stored);
+      expect(receipts.map((receipt) => receipt.status), [
+        WorkReceiptStatus.processing,
+        WorkReceiptStatus.stored,
+      ]);
       expect(
         (await repository.getReceipt('request-1'))!.status,
         WorkReceiptStatus.stored,

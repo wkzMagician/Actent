@@ -104,7 +104,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<ActentMessage> _messages = [];
   final List<Work> _works = [];
   final List<Device> _devices = [];
-  final Map<String, WorkReceiptStatus> _messageStatuses = {};
+  final Map<String, _ActivityStatus> _messageStatuses = {};
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
@@ -231,16 +231,27 @@ class _ActentHomePageState extends State<ActentHomePage> {
       works = [...works, shareWork];
       localCatalogChanged = true;
     }
-    final devices = await repository.listDevices();
+    final devices = (await repository.listDevices())
+        .where((device) => device.id != (widget.deviceId ?? 'local-device'))
+        .toList();
     final requests = await repository.listRequests();
     final receipts = await repository.listReceipts();
     final receiptsByRequest = {
       for (final receipt in receipts) receipt.requestId: receipt,
     };
-    final statuses = <String, WorkReceiptStatus>{};
+    final latestRequests = <String, WorkRequest>{};
     for (final request in requests) {
+      final previous = latestRequests[request.message.id];
+      if (previous == null || request.createdAt.isAfter(previous.createdAt)) {
+        latestRequests[request.message.id] = request;
+      }
+    }
+    final statuses = <String, _ActivityStatus>{};
+    for (final request in latestRequests.values) {
       final receipt = receiptsByRequest[request.requestId];
-      if (receipt != null) statuses[request.message.id] = receipt.status;
+      statuses[request.message.id] = receipt == null
+          ? _ActivityStatus.sending
+          : _activityStatusFromReceipt(receipt.status);
     }
     messages.sort((left, right) => right.createdAt.compareTo(left.createdAt));
     if (!mounted) return;
@@ -330,7 +341,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
   Future<void> _onReceipt(WorkReceipt receipt) async {
     final request = await widget.repository?.getRequest(receipt.requestId);
     if (!mounted || request == null) return;
-    setState(() => _messageStatuses[request.message.id] = receipt.status);
+    setState(
+      () => _messageStatuses[request.message.id] = _activityStatusFromReceipt(
+        receipt.status,
+      ),
+    );
   }
 
   @override
@@ -585,6 +600,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final repository = widget.repository;
     final queue = _queue;
     if (repository == null || queue == null) return;
+    if (mounted) {
+      setState(() => _messageStatuses[message.id] = _ActivityStatus.sending);
+    }
     try {
       final router = widget.router;
       if (router != null) {
@@ -608,6 +626,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
       }
       await _loadRepositoryData(repository);
     } on Object catch (error) {
+      if (mounted) {
+        setState(
+          () => _messageStatuses[message.id] = _ActivityStatus.sendFailed,
+        );
+      }
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -638,42 +661,33 @@ class _ActentHomePageState extends State<ActentHomePage> {
                     return Card(
                       child: ListTile(
                         leading: const Icon(Icons.share_outlined),
-                        title: Text(message.content.type.value),
+                        title: Text(_messagePreview(message)),
                         subtitle: Text(
-                          '${message.id}${_messageStatuses[message.id] == null ? '' : ' · ${_messageStatuses[message.id]!.value}'}',
+                          '${_activityTime(message.createdAt)} · '
+                          '${_activityStatusLabel(_messageStatuses[message.id], AppLocalizations.of(context)!)}',
                         ),
-                        onTap: () => _showWorkPicker(message),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             PopupMenuButton<String>(
                               onSelected: (value) async {
                                 if (value == 'retry') {
-                                  await _showWorkPicker(message);
-                                } else if (value == 'cancel') {
-                                  await _cancelMessageRequests(message);
-                                } else if (value == 'delete') {
-                                  await _deleteMessage(message);
+                                  await _retryMessage(message);
+                                } else if (value == 'discard') {
+                                  await _discardMessage(message);
                                 }
                               },
                               itemBuilder: (context) => [
                                 PopupMenuItem(
                                   value: 'retry',
                                   child: Text(
-                                    AppLocalizations.of(context)!.runAgain,
+                                    AppLocalizations.of(context)!.resend,
                                   ),
                                 ),
                                 PopupMenuItem(
-                                  value: 'cancel',
+                                  value: 'discard',
                                   child: Text(
-                                    AppLocalizations.of(context)!
-                                        .cancelPendingRequests,
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(
-                                    AppLocalizations.of(context)!.deleteMessage,
+                                    AppLocalizations.of(context)!.discard,
                                   ),
                                 ),
                               ],
@@ -1547,7 +1561,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
         await repository.deleteWork(work.id);
       }
     }
-    await repository.deleteDevice(device.id);
+    final router = widget.router;
+    if (router != null) {
+      await router.unpair(device.id);
+    } else {
+      await repository.deleteDevice(device.id);
+    }
     await _loadRepositoryData(repository);
   }
 
@@ -2204,6 +2223,65 @@ class _ActentHomePageState extends State<ActentHomePage> {
     );
   }
 
+  Future<void> _discardMessage(ActentMessage message) async {
+    await _cancelMessageRequests(message);
+    await _deleteMessage(message);
+  }
+
+  Future<void> _retryMessage(ActentMessage message) async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final request = (await repository.listRequests())
+        .where((item) => item.message.id == message.id)
+        .fold<WorkRequest?>(
+          null,
+          (latest, item) =>
+              latest == null || item.createdAt.isAfter(latest.createdAt)
+              ? item
+              : latest,
+        );
+    if (request == null) return;
+    final work = await repository.getWork(request.workId);
+    if (work == null) return;
+    await _routeMessageToWork(message, work);
+  }
+
+  _ActivityStatus _activityStatusFromReceipt(WorkReceiptStatus status) =>
+      switch (status) {
+        WorkReceiptStatus.stored => _ActivityStatus.received,
+        WorkReceiptStatus.processing => _ActivityStatus.processing,
+        WorkReceiptStatus.succeeded => _ActivityStatus.succeeded,
+        WorkReceiptStatus.failed ||
+        WorkReceiptStatus.expired ||
+        WorkReceiptStatus.cancelled => _ActivityStatus.failed,
+      };
+
+  String _activityStatusLabel(_ActivityStatus? status, AppLocalizations l10n) =>
+      switch (status ?? _ActivityStatus.sending) {
+        _ActivityStatus.sending => l10n.activitySending,
+        _ActivityStatus.sendFailed => l10n.activitySendFailed,
+        _ActivityStatus.received => l10n.activityReceived,
+        _ActivityStatus.processing => l10n.activityProcessing,
+        _ActivityStatus.failed => l10n.activityFailed,
+        _ActivityStatus.succeeded => l10n.activitySucceeded,
+      };
+
+  String _messagePreview(ActentMessage message) {
+    final value = message.content.data['text'] ?? message.content.data['url'];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim().replaceAll(RegExp(r'\s+'), ' ');
+    }
+    if (message.attachments.isNotEmpty) return message.attachments.first.name;
+    return message.content.type.value;
+  }
+
+  String _activityTime(DateTime value) {
+    final local = value.toLocal();
+    String twoDigits(int item) => item.toString().padLeft(2, '0');
+    return '${local.year}-${twoDigits(local.month)}-${twoDigits(local.day)} '
+        '${twoDigits(local.hour)}:${twoDigits(local.minute)}';
+  }
+
   Future<void> _deleteMessage(ActentMessage message) async {
     final repository = widget.repository;
     if (repository == null) return;
@@ -2214,7 +2292,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await repository.deleteMessage(message.id);
     }
     if (!mounted) return;
-    setState(() => _messages.removeWhere((item) => item.id == message.id));
+    setState(() {
+      _messages.removeWhere((item) => item.id == message.id);
+      _messageStatuses.remove(message.id);
+    });
   }
 
   Future<void> _cancelMessageRequests(ActentMessage message) async {
@@ -2433,6 +2514,15 @@ class _ActentPageData {
   final String title;
   final IconData icon;
   final String message;
+}
+
+enum _ActivityStatus {
+  sending,
+  sendFailed,
+  received,
+  processing,
+  failed,
+  succeeded,
 }
 
 class _AndroidSecretResolver implements SecretResolver {

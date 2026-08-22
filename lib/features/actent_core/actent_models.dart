@@ -39,7 +39,14 @@ extension ActentContentTypeJson on ActentContentType {
   }
 }
 
-enum WorkReceiptStatus { succeeded, failed, stored, expired, cancelled }
+enum WorkReceiptStatus {
+  succeeded,
+  failed,
+  stored,
+  processing,
+  expired,
+  cancelled,
+}
 
 extension WorkReceiptStatusJson on WorkReceiptStatus {
   String get value => name;

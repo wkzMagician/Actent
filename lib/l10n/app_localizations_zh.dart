@@ -168,6 +168,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get runAgain => '再次运行';
 
   @override
+  String get resend => '重发';
+
+  @override
+  String get activitySending => '正在发送中';
+
+  @override
+  String get activitySendFailed => '发送失败';
+
+  @override
+  String get activityReceived => '已接收';
+
+  @override
+  String get activityProcessing => '正在处理中';
+
+  @override
+  String get activityFailed => '处理失败';
+
+  @override
+  String get activitySucceeded => '已处理成功';
+
+  @override
   String get cancelPendingRequests => '取消待处理请求';
 
   @override

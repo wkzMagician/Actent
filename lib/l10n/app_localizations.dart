@@ -404,6 +404,48 @@ abstract class AppLocalizations {
   /// **'Run again'**
   String get runAgain;
 
+  /// No description provided for @resend.
+  ///
+  /// In en, this message translates to:
+  /// **'Resend'**
+  String get resend;
+
+  /// No description provided for @activitySending.
+  ///
+  /// In en, this message translates to:
+  /// **'Sending'**
+  String get activitySending;
+
+  /// No description provided for @activitySendFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Send failed'**
+  String get activitySendFailed;
+
+  /// No description provided for @activityReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Received'**
+  String get activityReceived;
+
+  /// No description provided for @activityProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing'**
+  String get activityProcessing;
+
+  /// No description provided for @activityFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Processing failed'**
+  String get activityFailed;
+
+  /// No description provided for @activitySucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Processed'**
+  String get activitySucceeded;
+
   /// No description provided for @cancelPendingRequests.
   ///
   /// In en, this message translates to:

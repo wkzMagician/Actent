@@ -227,6 +227,8 @@ class ActentTransportService implements MessageConnection {
             payload['device'],
             authenticatedSenderId: packet.senderId,
           );
+        case 'pairingRemoved':
+          await router.receivePairingRemoved(packet.senderId);
         case 'workRequest':
         case 'workReceipt':
           await router.receive(

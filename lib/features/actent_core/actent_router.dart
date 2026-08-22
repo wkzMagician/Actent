@@ -411,6 +411,7 @@ class ActentRouter {
         await repository.deleteWork(workId);
       }
     }
+    _repositoryUpdates.add(null);
   }
 
   Future<void> receiveCatalogDelta(
@@ -455,6 +456,7 @@ class ActentRouter {
         await repository.deleteWork(workId);
       }
     }
+    _repositoryUpdates.add(null);
   }
 
   /// Sends the current non-local Work catalog to a newly paired device. The
@@ -497,6 +499,38 @@ class ActentRouter {
         'device': device.toJson(),
       },
     );
+  }
+
+  Future<void> unpair(String recipientId) async {
+    try {
+      await connection.send(
+        recipientId: recipientId,
+        payload: <String, Object?>{
+          'type': 'pairingRemoved',
+          'schemaVersion': actentSchemaVersion,
+        },
+      );
+    } on Object {
+      // Local removal must still succeed when the peer is offline. Relay/LAN
+      // delivery remains best effort.
+    } finally {
+      await _removePeer(recipientId);
+    }
+  }
+
+  Future<void> receivePairingRemoved(String authenticatedSenderId) =>
+      _removePeer(authenticatedSenderId);
+
+  Future<void> _removePeer(String peerDeviceId) async {
+    for (final work in await repository.listWorks()) {
+      if (work.ownerDeviceId == peerDeviceId) {
+        await repository.deleteWork(work.id);
+      }
+    }
+    await repository.deleteDevice(peerDeviceId);
+    _receivedCatalogs.remove(peerDeviceId);
+    _publishedCatalogs.remove(peerDeviceId);
+    _repositoryUpdates.add(null);
   }
 
   Future<void> receiveDeviceUpdate(

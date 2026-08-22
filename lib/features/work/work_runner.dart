@@ -329,6 +329,13 @@ class WorkQueueCoordinator {
     _running[item.request.requestId] = token;
     WorkReceipt receipt;
     try {
+      await _complete(
+        _receipt(
+          item.request,
+          WorkReceiptStatus.processing,
+          summary: 'Work execution started.',
+        ),
+      );
       if (item.request.isExpired) {
         receipt = _receipt(
           item.request,

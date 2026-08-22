@@ -179,6 +179,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get runAgain => 'Run again';
 
   @override
+  String get resend => 'Resend';
+
+  @override
+  String get activitySending => 'Sending';
+
+  @override
+  String get activitySendFailed => 'Send failed';
+
+  @override
+  String get activityReceived => 'Received';
+
+  @override
+  String get activityProcessing => 'Processing';
+
+  @override
+  String get activityFailed => 'Processing failed';
+
+  @override
+  String get activitySucceeded => 'Processed';
+
+  @override
   String get cancelPendingRequests => 'Cancel pending requests';
 
   @override
