@@ -104,6 +104,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   var _selectedIndex = 0;
   final List<ActentMessage> _messages = [];
   final List<Work> _works = [];
+  final List<Workflow> _workflows = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
   String? _pendingWorkName;
@@ -135,6 +136,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
         title: l10n.works,
         icon: Icons.work_outline,
         message: l10n.worksDescription,
+      ),
+      _ActentPageData(
+        title: l10n.workflows,
+        icon: Icons.account_tree_outlined,
+        message: l10n.workflowsDescription,
       ),
       _ActentPageData(
         title: l10n.devices,
@@ -177,6 +183,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final l10n = AppLocalizations.of(context)!;
     final messages = await repository.listMessages();
     var works = await repository.listWorks();
+    final workflows = await repository.listWorkflows();
     final localDeviceId = widget.deviceId ?? 'local-device';
     final localNullId = 'null-$localDeviceId';
     var localCatalogChanged = false;
@@ -265,6 +272,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _works
         ..clear()
         ..addAll(works);
+      _workflows
+        ..clear()
+        ..addAll(workflows);
       _devices
         ..clear()
         ..addAll(devices);
@@ -724,12 +734,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
         : _selectedIndex == 1
         ? _worksPage(context)
         : _selectedIndex == 2
+        ? _workflowsPage(context)
+        : _selectedIndex == 3
         ? _devicesPage(context)
         : _settingsPage(context);
     return Scaffold(
       appBar: AppBar(title: Text(page.title)),
       body: body,
-      floatingActionButton: _selectedIndex == 2
+      floatingActionButton: _selectedIndex == 3
           ? FloatingActionButton.extended(
               onPressed: _showPairingActions,
               icon: const Icon(Icons.person_add_alt_1),
@@ -740,6 +752,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
               onPressed: _showAddWork,
               icon: const Icon(Icons.add),
               label: Text(AppLocalizations.of(context)!.addWork),
+            )
+          : _selectedIndex == 2
+          ? FloatingActionButton.extended(
+              onPressed: _showAddWorkflow,
+              icon: const Icon(Icons.add),
+              label: Text(AppLocalizations.of(context)!.addWorkflow),
             )
           : null,
       bottomNavigationBar: NavigationBar(
@@ -846,6 +864,232 @@ class _ActentHomePageState extends State<ActentHomePage> {
               ],
             ],
           );
+  }
+
+  Widget _workflowsPage(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    if (_workflows.isEmpty) return _emptyPage(_pages(context)[2]);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        for (final workflow in _workflows)
+          Card(
+            child: ListTile(
+              leading: IconButton(
+                tooltip: l10n.runWork,
+                icon: const Icon(Icons.play_arrow_outlined),
+                onPressed: workflow.enabled
+                    ? () => _runWorkflow(workflow)
+                    : null,
+              ),
+              title: Text(workflow.name),
+              subtitle: Text(
+                '${workflow.steps.length} ${l10n.workflowSteps} · '
+                '${workflow.enabled ? l10n.workflowReady : l10n.workflowInvalid}',
+              ),
+              trailing: _isLocalWorkflow(workflow)
+                  ? PopupMenuButton<String>(
+                      onSelected: (value) async {
+                        if (value == 'delete') {
+                          final repository = widget.repository;
+                          if (repository == null) return;
+                          await repository.deleteWorkflow(workflow.id);
+                          await _publishCatalogChanges();
+                          await _loadRepositoryData(repository);
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text(l10n.delete),
+                        ),
+                      ],
+                    )
+                  : null,
+            ),
+          ),
+      ],
+    );
+  }
+
+  bool _isLocalWorkflow(Workflow workflow) =>
+      workflow.ownerDeviceId == (widget.deviceId ?? 'local-device');
+
+  Future<void> _runWorkflow(Workflow workflow) async {
+    final router = widget.router;
+    if (router == null || workflow.steps.isEmpty) return;
+    final first = _works
+        .where((work) => work.id == workflow.steps.first.workId)
+        .firstOrNull;
+    if (first == null || !first.enabled || !_isSelectableWork(first)) return;
+    final inputType = first.acceptedContentTypes.length == 1
+        ? first.acceptedContentTypes.single
+        : await _showInputTypePicker(first);
+    if (inputType == null || !mounted) return;
+    ActentMessage? message;
+    if ((inputType == ActentContentType.file ||
+            inputType == ActentContentType.image ||
+            inputType == ActentContentType.json) &&
+        widget.pickWorkInputFile != null) {
+      message = await widget.pickWorkInputFile!();
+    } else if (inputType == ActentContentType.text ||
+        inputType == ActentContentType.url ||
+        inputType == ActentContentType.json) {
+      message = await _showManualInputDialog(inputType);
+    }
+    if (message == null || !mounted || !first.accepts(message)) return;
+    final repository = widget.repository;
+    if (repository == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      final execution = await router.runWorkflow(message, workflow);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            execution.status == WorkflowExecutionStatus.succeeded
+                ? l10n.activitySucceeded
+                : '${l10n.workflowInvalid}: ${execution.error?.code ?? execution.status.value}',
+          ),
+        ),
+      );
+      await _loadRepositoryData(repository);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.workRequestFailed(error.toString()))),
+      );
+    }
+  }
+
+  Future<void> _showAddWorkflow() async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final candidates = _works.where(_isSelectableWork).toList()
+      ..sort((left, right) => left.name.compareTo(right.name));
+    final result = await showDialog<(String, List<WorkflowStep>)>(
+      context: context,
+      builder: (dialogContext) {
+        final nameController = TextEditingController();
+        final steps = <WorkflowStep>[];
+        String? selectedWorkId;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(l10n.addWorkflow),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: nameController,
+                    decoration: InputDecoration(labelText: l10n.workflowName),
+                    onChanged: (_) => setDialogState(() {}),
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(l10n.workflowSteps),
+                  ),
+                  for (var index = 0; index < steps.length; index++)
+                    ListTile(
+                      dense: true,
+                      leading: Text('${index + 1}'),
+                      title: Text(
+                        _works
+                            .firstWhere(
+                              (work) => work.id == steps[index].workId,
+                            )
+                            .name,
+                      ),
+                      subtitle: Text(steps[index].deviceId),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.remove_circle_outline),
+                        onPressed: () =>
+                            setDialogState(() => steps.removeAt(index)),
+                      ),
+                    ),
+                  if (candidates.isNotEmpty)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: selectedWorkId,
+                            hint: Text(l10n.addWorkflowStep),
+                            items: [
+                              for (final work in candidates)
+                                DropdownMenuItem(
+                                  value: work.id,
+                                  child: Text(work.name),
+                                ),
+                            ],
+                            onChanged: (value) =>
+                                setDialogState(() => selectedWorkId = value),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          onPressed: selectedWorkId == null
+                              ? null
+                              : () {
+                                  final work = candidates.firstWhere(
+                                    (item) => item.id == selectedWorkId,
+                                  );
+                                  setDialogState(() {
+                                    steps.add(
+                                      WorkflowStep(
+                                        id: 'step-${steps.length + 1}',
+                                        workId: work.id,
+                                        workRevision: work.revision,
+                                        deviceId: work.ownerDeviceId,
+                                      ),
+                                    );
+                                    selectedWorkId = null;
+                                  });
+                                },
+                        ),
+                      ],
+                    )
+                  else
+                    Text(l10n.noWorkflowSteps),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: steps.isEmpty || nameController.text.trim().isEmpty
+                    ? null
+                    : () => Navigator.pop(dialogContext, (
+                        nameController.text.trim(),
+                        List.of(steps),
+                      )),
+                child: Text(l10n.save),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (result == null) return;
+    final now = DateTime.now().toUtc();
+    await repository.saveWorkflow(
+      Workflow(
+        id: 'workflow-${now.microsecondsSinceEpoch}',
+        revision: 1,
+        name: result.$1,
+        ownerDeviceId: widget.deviceId ?? 'local-device',
+        steps: result.$2,
+        acceptedContentTypes: ActentContentType.values.toSet(),
+      ),
+    );
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
   }
 
   List<(String, List<Work>)> _worksByOwner(AppLocalizations l10n) {

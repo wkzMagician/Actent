@@ -37,6 +37,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get worksDescription => '创建和管理此设备上可用的操作。';
 
   @override
+  String get workflows => '工作流';
+
+  @override
+  String get workflowsDescription => '在已配对设备之间按顺序运行多个任务。';
+
+  @override
+  String get addWorkflow => '新增工作流';
+
+  @override
+  String get workflowName => '工作流名称';
+
+  @override
+  String get workflowSteps => '步骤';
+
+  @override
+  String get addWorkflowStep => '添加步骤';
+
+  @override
+  String get noWorkflowSteps => '至少添加一个任务步骤。';
+
+  @override
+  String get workflowInvalid => '无效';
+
+  @override
+  String get workflowReady => '就绪';
+
+  @override
   String get devices => '设备';
 
   @override

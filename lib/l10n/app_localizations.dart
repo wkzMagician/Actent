@@ -152,6 +152,60 @@ abstract class AppLocalizations {
   /// **'Create and manage the actions available on this device.'**
   String get worksDescription;
 
+  /// No description provided for @workflows.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflows'**
+  String get workflows;
+
+  /// No description provided for @workflowsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Run a linear sequence of Works across paired devices.'**
+  String get workflowsDescription;
+
+  /// No description provided for @addWorkflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Workflow'**
+  String get addWorkflow;
+
+  /// No description provided for @workflowName.
+  ///
+  /// In en, this message translates to:
+  /// **'Workflow name'**
+  String get workflowName;
+
+  /// No description provided for @workflowSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Steps'**
+  String get workflowSteps;
+
+  /// No description provided for @addWorkflowStep.
+  ///
+  /// In en, this message translates to:
+  /// **'Add step'**
+  String get addWorkflowStep;
+
+  /// No description provided for @noWorkflowSteps.
+  ///
+  /// In en, this message translates to:
+  /// **'Add at least one Work step.'**
+  String get noWorkflowSteps;
+
+  /// No description provided for @workflowInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid'**
+  String get workflowInvalid;
+
+  /// No description provided for @workflowReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get workflowReady;
+
   /// No description provided for @devices.
   ///
   /// In en, this message translates to:

@@ -632,4 +632,207 @@ void main() {
       throwsA(isA<WorkCatalogException>()),
     );
   });
+
+  test(
+    'router executes a local linear workflow and forwards step output',
+    () async {
+      final repository = ActentRepository(MemoryActentJsonStore());
+      final first = Work(
+        id: 'first',
+        revision: 1,
+        name: 'First',
+        ownerDeviceId: 'phone',
+        acceptedContentTypes: const {ActentContentType.text},
+        outputType: ActentContentType.text,
+      );
+      final second = Work(
+        id: 'second',
+        revision: 1,
+        name: 'Second',
+        ownerDeviceId: 'phone',
+        acceptedContentTypes: const {ActentContentType.text},
+        outputType: ActentContentType.none,
+      );
+      await repository.saveWork(first);
+      await repository.saveWork(second);
+      final queue = WorkQueueCoordinator(repository: repository)
+        ..register(
+          first.id,
+          FakeWorkRunner(
+            result: WorkRunResult.success(
+              output: ActentPayload(
+                type: ActentContentType.text,
+                data: const {'text': 'next'},
+              ),
+            ),
+          ),
+        )
+        ..register(second.id, FakeWorkRunner());
+      final router = ActentRouter(
+        deviceId: 'phone',
+        repository: repository,
+        connection: FakeMessageConnection(),
+        queue: queue,
+      );
+      final now = DateTime.now().toUtc();
+      final message = ActentMessage(
+        id: 'workflow-input',
+        traceId: 'trace',
+        createdAt: now,
+        source: const ActentSource(kind: 'test', deviceId: 'phone'),
+        payload: ActentPayload(
+          type: ActentContentType.text,
+          data: const {'text': 'input'},
+        ),
+      );
+      final workflow = Workflow(
+        id: 'workflow',
+        revision: 1,
+        name: 'Two steps',
+        ownerDeviceId: 'phone',
+        acceptedContentTypes: const {ActentContentType.text},
+        steps: const [
+          WorkflowStep(
+            id: 'first-step',
+            workId: 'first',
+            workRevision: 1,
+            deviceId: 'phone',
+          ),
+          WorkflowStep(
+            id: 'second-step',
+            workId: 'second',
+            workRevision: 1,
+            deviceId: 'phone',
+          ),
+        ],
+      );
+      final execution = await router.runWorkflow(message, workflow);
+      expect(execution.status, WorkflowExecutionStatus.succeeded);
+      expect(execution.currentStepIndex, 1);
+      final requests = await repository.listRequests();
+      expect(requests, hasLength(2));
+      expect(
+        requests.every((request) => request.workflowExecutionId != null),
+        isTrue,
+      );
+    },
+  );
+
+  test('router executes a workflow across two paired devices', () async {
+    final sourceRepository = ActentRepository(MemoryActentJsonStore());
+    final targetRepository = ActentRepository(MemoryActentJsonStore());
+    final remoteWork = Work(
+      id: 'remote',
+      revision: 1,
+      name: 'Remote step',
+      ownerDeviceId: 'desktop',
+      acceptedContentTypes: const {ActentContentType.text},
+      outputType: ActentContentType.text,
+    );
+    final localWork = Work(
+      id: 'local',
+      revision: 1,
+      name: 'Local step',
+      ownerDeviceId: 'phone',
+      acceptedContentTypes: const {ActentContentType.text},
+      outputType: ActentContentType.none,
+    );
+    await sourceRepository.saveWork(remoteWork);
+    await sourceRepository.saveWork(localWork);
+    await targetRepository.saveWork(remoteWork);
+    await targetRepository.saveDevice(
+      Device(
+        id: 'phone',
+        displayName: 'Phone',
+        platform: 'ios',
+        publicKey: 'phone-key',
+      ),
+    );
+    await sourceRepository.saveDevice(
+      Device(
+        id: 'desktop',
+        displayName: 'Desktop',
+        platform: 'windows',
+        publicKey: 'desktop-key',
+      ),
+    );
+    final sourceQueue = WorkQueueCoordinator(repository: sourceRepository)
+      ..register(localWork.id, FakeWorkRunner());
+    final targetQueue = WorkQueueCoordinator(repository: targetRepository)
+      ..register(
+        remoteWork.id,
+        FakeWorkRunner(
+          result: WorkRunResult.success(
+            output: ActentPayload(
+              type: ActentContentType.text,
+              data: const {'text': 'remote output'},
+            ),
+          ),
+        ),
+      );
+    late ActentRouter sourceRouter;
+    late ActentRouter targetRouter;
+    sourceRouter = ActentRouter(
+      deviceId: 'phone',
+      repository: sourceRepository,
+      connection: _RouterBridge('phone', () => targetRouter),
+      queue: sourceQueue,
+    );
+    targetRouter = ActentRouter(
+      deviceId: 'desktop',
+      repository: targetRepository,
+      connection: _RouterBridge('desktop', () => sourceRouter),
+      queue: targetQueue,
+    );
+    final now = DateTime.now().toUtc();
+    final execution = await sourceRouter.runWorkflow(
+      ActentMessage(
+        id: 'cross-device-input',
+        traceId: 'trace',
+        createdAt: now,
+        source: const ActentSource(kind: 'test', deviceId: 'phone'),
+        payload: ActentPayload(
+          type: ActentContentType.text,
+          data: const {'text': 'input'},
+        ),
+      ),
+      Workflow(
+        id: 'cross-device',
+        revision: 1,
+        name: 'Remote then local',
+        ownerDeviceId: 'phone',
+        acceptedContentTypes: const {ActentContentType.text},
+        steps: const [
+          WorkflowStep(
+            id: 'remote-step',
+            workId: 'remote',
+            workRevision: 1,
+            deviceId: 'desktop',
+          ),
+          WorkflowStep(
+            id: 'local-step',
+            workId: 'local',
+            workRevision: 1,
+            deviceId: 'phone',
+          ),
+        ],
+      ),
+    );
+    expect(execution.status, WorkflowExecutionStatus.succeeded);
+    expect((await targetRepository.listRequests()), hasLength(1));
+    expect((await sourceRepository.listRequests()), hasLength(2));
+  });
+}
+
+class _RouterBridge implements MessageConnection {
+  _RouterBridge(this.senderId, this.target);
+
+  final String senderId;
+  final ActentRouter Function() target;
+
+  @override
+  Future<void> send({
+    required String recipientId,
+    required Map<String, Object?> payload,
+  }) => target().receive(payload, authenticatedSenderId: senderId).then((_) {});
 }

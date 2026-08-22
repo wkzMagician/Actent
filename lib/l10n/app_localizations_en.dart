@@ -39,6 +39,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'Create and manage the actions available on this device.';
 
   @override
+  String get workflows => 'Workflows';
+
+  @override
+  String get workflowsDescription =>
+      'Run a linear sequence of Works across paired devices.';
+
+  @override
+  String get addWorkflow => 'Add Workflow';
+
+  @override
+  String get workflowName => 'Workflow name';
+
+  @override
+  String get workflowSteps => 'Steps';
+
+  @override
+  String get addWorkflowStep => 'Add step';
+
+  @override
+  String get noWorkflowSteps => 'Add at least one Work step.';
+
+  @override
+  String get workflowInvalid => 'Invalid';
+
+  @override
+  String get workflowReady => 'Ready';
+
+  @override
   String get devices => 'Devices';
 
   @override

@@ -11,6 +11,7 @@ import 'actent_models.dart';
 import 'actent_store.dart';
 import 'work_catalog.dart';
 import '../work/work_runner.dart';
+import 'workflow_engine.dart';
 
 abstract interface class MessageConnection {
   Future<void> send({
@@ -164,6 +165,9 @@ class ActentRouter {
     ActentMessage message,
     Work work, {
     String? targetDeviceId,
+    String? workflowExecutionId,
+    String? workflowStepId,
+    String? workflowOwnerDeviceId,
   }) async {
     if (!work.enabled) throw WorkUnavailableException(work.id, 'disabled');
     if (!work.accepts(message)) {
@@ -172,7 +176,14 @@ class ActentRouter {
     await repository.saveMessage(message);
     final target = targetDeviceId ?? work.ownerDeviceId;
     if (target == deviceId) {
-      final request = _request(message, work, sourceDeviceId: deviceId);
+      final request = _request(
+        message,
+        work,
+        sourceDeviceId: deviceId,
+        workflowExecutionId: workflowExecutionId,
+        workflowStepId: workflowStepId,
+        workflowOwnerDeviceId: workflowOwnerDeviceId,
+      );
       await queue.enqueue(work, request);
       return request;
     }
@@ -181,6 +192,9 @@ class ActentRouter {
       work,
       sourceDeviceId: deviceId,
       targetDeviceId: target,
+      workflowExecutionId: workflowExecutionId,
+      workflowStepId: workflowStepId,
+      workflowOwnerDeviceId: workflowOwnerDeviceId,
     );
     await repository.saveRequest(request);
     await connection.send(
@@ -193,6 +207,85 @@ class ActentRouter {
     );
     return request;
   }
+
+  /// Executes a linear Workflow through the same paired Work route used by
+  /// individual tasks. Only the owner coordinates; no temporary authorization
+  /// channel is introduced between devices.
+  Future<WorkflowExecution> runWorkflow(
+    ActentMessage message,
+    Workflow workflow,
+  ) async {
+    final runner = WorkflowRunner(
+      repository: repository,
+      validator: WorkflowValidator(
+        repository: repository,
+        localDeviceId: deviceId,
+      ),
+    );
+    return runner.start(
+      workflow: workflow,
+      input: message.payload,
+      sourceDeviceId: deviceId,
+      executeStep:
+          ({
+            required step,
+            required work,
+            required input,
+            required executionId,
+          }) async {
+            final stepMessage = _workflowMessage(message, input, step.id);
+            final request = await route(
+              stepMessage,
+              work,
+              targetDeviceId: step.deviceId,
+              workflowExecutionId: executionId,
+              workflowStepId: step.id,
+              workflowOwnerDeviceId: workflow.ownerDeviceId,
+            );
+            return _waitForTerminalReceipt(request.requestId);
+          },
+    );
+  }
+
+  Future<WorkReceipt> _waitForTerminalReceipt(String requestId) async {
+    final deadline = DateTime.now().add(const Duration(hours: 24));
+    while (DateTime.now().isBefore(deadline)) {
+      final receipt = await repository.getReceipt(requestId);
+      if (receipt != null && _isTerminalReceipt(receipt.status)) {
+        return receipt;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return WorkReceipt(
+      requestId: requestId,
+      workId: requestId,
+      status: WorkReceiptStatus.failed,
+      createdAt: DateTime.now().toUtc(),
+      error: const WorkError(code: 'workflow_step_timeout'),
+    );
+  }
+
+  bool _isTerminalReceipt(WorkReceiptStatus status) => switch (status) {
+    WorkReceiptStatus.succeeded ||
+    WorkReceiptStatus.failed ||
+    WorkReceiptStatus.expired ||
+    WorkReceiptStatus.cancelled ||
+    WorkReceiptStatus.interrupted => true,
+    _ => false,
+  };
+
+  ActentMessage _workflowMessage(
+    ActentMessage original,
+    ActentPayload payload,
+    String stepId,
+  ) => ActentMessage(
+    id: '${original.id}-$stepId-${DateTime.now().microsecondsSinceEpoch}',
+    traceId: original.traceId,
+    createdAt: DateTime.now().toUtc(),
+    source: original.source,
+    payload: payload,
+    metadata: <String, Object?>{...original.metadata, 'workflowStepId': stepId},
+  );
 
   Future<WorkReceipt> receive(
     Map<String, Object?> payload, {
@@ -714,6 +807,9 @@ class ActentRouter {
     Work work, {
     required String sourceDeviceId,
     String? targetDeviceId,
+    String? workflowExecutionId,
+    String? workflowStepId,
+    String? workflowOwnerDeviceId,
   }) {
     final now = DateTime.now().toUtc();
     return WorkRequest(
@@ -725,6 +821,9 @@ class ActentRouter {
       targetDeviceId: targetDeviceId ?? deviceId,
       createdAt: now,
       expiresAt: now.add(work.timeout),
+      workflowExecutionId: workflowExecutionId,
+      workflowStepId: workflowStepId,
+      workflowOwnerDeviceId: workflowOwnerDeviceId,
     );
   }
 
