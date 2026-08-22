@@ -46,6 +46,9 @@ enum WorkReceiptStatus {
   processing,
   expired,
   cancelled,
+  queued,
+  cancelling,
+  interrupted,
 }
 
 extension WorkReceiptStatusJson on WorkReceiptStatus {
@@ -366,6 +369,26 @@ class Work {
     'catalogVisibility': catalogVisibility,
   };
 
+  /// The definition needed by a peer to display and route a task.
+  ///
+  /// Execution bindings remain on the owning device. A peer only needs the
+  /// stable identity, display metadata and compatibility information.
+  Map<String, Object?> toCatalogJson() => <String, Object?>{
+    'id': id,
+    'revision': revision,
+    'name': name,
+    'ownerDeviceId': ownerDeviceId,
+    'allowedSourceDeviceIds': allowedSourceDeviceIds.toList(),
+    'acceptedContentTypes': acceptedContentTypes
+        .map((value) => value.value)
+        .toList(),
+    'timeoutSeconds': timeout.inSeconds,
+    'queueLimit': queueLimit,
+    'enabled': enabled,
+    'catalogVisibility': catalogVisibility,
+    'catalogOnly': true,
+  };
+
   factory Work.fromJson(Object? value) {
     final json = _map(value, 'work');
     final allowed = _stringList(
@@ -403,7 +426,9 @@ class Work {
       timeout: Duration(seconds: timeoutSeconds),
       queueLimit: queueLimit,
       enabled: _boolean(json, 'enabled', 'enabled'),
-      platformBindings: _map(json['platformBindings'], 'platformBindings'),
+      platformBindings: json['catalogOnly'] == true
+          ? const {}
+          : _map(json['platformBindings'], 'platformBindings'),
       catalogVisibility: _map(json['catalogVisibility'], 'catalogVisibility'),
     );
   }

@@ -118,6 +118,7 @@ class WorkQueueCoordinator {
   final List<WorkReceiptHandler> _receiptListeners = [];
   final Map<String, _WorkQueue> _queues = {};
   final Map<String, CancellationToken> _running = {};
+  final Map<String, String> _runningWorkIds = {};
   int _runningCount = 0;
   bool _draining = false;
 
@@ -127,7 +128,8 @@ class WorkQueueCoordinator {
       _receiptListeners.add(listener);
 
   Future<void> enqueue(Work work, WorkRequest request) async {
-    if (await repository.getReceipt(request.requestId) != null ||
+    final existingReceipt = await repository.getReceipt(request.requestId);
+    if ((existingReceipt != null && !_isActiveStatus(existingReceipt.status)) ||
         _running.containsKey(request.requestId) ||
         _queues.values.any(
           (queue) => queue.pending.any(
@@ -160,6 +162,13 @@ class WorkQueueCoordinator {
     queue.pending.add(
       _QueuedWork(work: work, request: request, runner: runner),
     );
+    await _complete(
+      _receipt(
+        request,
+        WorkReceiptStatus.queued,
+        summary: 'Work request is queued.',
+      ),
+    );
     await _drain();
   }
 
@@ -168,7 +177,10 @@ class WorkQueueCoordinator {
   Future<void> restorePending(Iterable<Work> works) async {
     final byId = {for (final work in works) work.id: work};
     for (final request in await repository.listRequests()) {
-      if (await repository.getReceipt(request.requestId) != null) continue;
+      final existingReceipt = await repository.getReceipt(request.requestId);
+      if (existingReceipt != null && !_isActiveStatus(existingReceipt.status)) {
+        continue;
+      }
       final work = byId[request.workId];
       if (work == null) {
         await _complete(
@@ -293,6 +305,15 @@ class WorkQueueCoordinator {
     final token = _running[requestId];
     if (token != null) {
       token.cancel();
+      await _complete(
+        WorkReceipt(
+          requestId: requestId,
+          workId: _runningWorkIds[requestId] ?? requestId,
+          status: WorkReceiptStatus.cancelling,
+          createdAt: DateTime.now().toUtc(),
+          completedAt: DateTime.now().toUtc(),
+        ),
+      );
       return true;
     }
     return false;
@@ -327,6 +348,7 @@ class WorkQueueCoordinator {
   Future<void> _run(_WorkQueue queue, _QueuedWork item) async {
     final token = CancellationToken();
     _running[item.request.requestId] = token;
+    _runningWorkIds[item.request.requestId] = item.request.workId;
     WorkReceipt receipt;
     try {
       await _complete(
@@ -368,6 +390,7 @@ class WorkQueueCoordinator {
       );
     } finally {
       _running.remove(item.request.requestId);
+      _runningWorkIds.remove(item.request.requestId);
       queue.running = false;
       _runningCount--;
     }
@@ -398,6 +421,11 @@ class WorkQueueCoordinator {
     }
   }
 }
+
+bool _isActiveStatus(WorkReceiptStatus status) =>
+    status == WorkReceiptStatus.queued ||
+    status == WorkReceiptStatus.processing ||
+    status == WorkReceiptStatus.cancelling;
 
 class _WorkQueue {
   _WorkQueue(this.workId);

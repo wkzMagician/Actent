@@ -180,7 +180,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activityReceived => '已接收';
 
   @override
+  String get activityQueued => '排队中';
+
+  @override
   String get activityProcessing => '正在处理中';
+
+  @override
+  String get activityCancelling => '正在取消';
+
+  @override
+  String get activityInterrupted => '执行中断';
 
   @override
   String get activityFailed => '处理失败';
@@ -210,10 +219,52 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scriptWorkType => '脚本任务';
 
   @override
+  String get fileWorkType => '程序或脚本文件';
+
+  @override
+  String get shellWorkType => 'Shell 脚本任务';
+
+  @override
+  String get addShellWork => '新增 Shell 脚本任务';
+
+  @override
+  String get editShellWork => '编辑 Shell 脚本任务';
+
+  @override
+  String get addFileWork => '新增程序或脚本任务';
+
+  @override
+  String get editFileWork => '编辑程序或脚本任务';
+
+  @override
+  String get programOrScriptFile => '程序或脚本文件';
+
+  @override
+  String get shell => 'Shell';
+
+  @override
+  String get shellSource => 'Shell 脚本';
+
+  @override
   String get javaScriptWorkType => 'JavaScript 任务';
 
   @override
   String get applicationWorkType => '应用程序任务';
+
+  @override
+  String get intentAction => '操作';
+
+  @override
+  String get chooseApplication => '选择应用程序';
+
+  @override
+  String get noCompatibleApps => '没有找到兼容的应用程序';
+
+  @override
+  String get iosApplicationMode => '集成方式';
+
+  @override
+  String get shortcutName => '快捷指令名称';
 
   @override
   String get networkWorkType => '网络任务';
@@ -229,6 +280,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get networkUrl => '网络 URL';
+
+  @override
+  String get networkMethod => '请求方法';
+
+  @override
+  String get networkHeaders => '请求头（每行一个）';
+
+  @override
+  String get networkBody => '请求正文';
 
   @override
   String get applicationUrl => '应用程序 URL 或 URL Scheme';

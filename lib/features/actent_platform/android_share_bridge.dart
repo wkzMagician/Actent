@@ -32,6 +32,41 @@ class AndroidShareBridge {
 
   AndroidIntentLauncher get intentLauncher =>
       _AndroidBridgeIntentLauncher(_methods);
+
+  Future<List<AndroidIntentTarget>> findIntentTargets({
+    required String action,
+    String? mimeType,
+  }) async {
+    final values = await _methods.invokeMethod<List<Object?>>(
+      'queryIntentHandlers',
+      <String, Object?>{'action': action, 'mimeType': mimeType},
+    );
+    return [
+      for (final value in values ?? const <Object?>[])
+        AndroidIntentTarget.fromJson(value),
+    ];
+  }
+}
+
+class AndroidIntentTarget {
+  const AndroidIntentTarget({
+    required this.label,
+    required this.packageName,
+    required this.componentName,
+  });
+
+  final String label;
+  final String packageName;
+  final String componentName;
+
+  factory AndroidIntentTarget.fromJson(Object? value) {
+    final json = Map<String, Object?>.from(value as Map);
+    return AndroidIntentTarget(
+      label: json['label'] as String? ?? json['packageName'] as String,
+      packageName: json['packageName'] as String,
+      componentName: json['componentName'] as String,
+    );
+  }
 }
 
 class _AndroidBridgeUriProvider implements AndroidContentUriProvider {

@@ -473,7 +473,7 @@ class ActentRouter {
         'schemaVersion': actentSchemaVersion,
         'catalog': <String, Object?>{
           'revision': revision,
-          'works': works.map((work) => work.toJson()).toList(),
+          'works': works.map((work) => work.toCatalogJson()).toList(),
         },
       },
     );
@@ -598,7 +598,7 @@ class ActentRouter {
         'catalog': <String, Object?>{
           'baseRevision': previous.revision,
           'nextRevision': nextRevision,
-          'upserts': upserts.map((work) => work.toJson()).toList(),
+          'upserts': upserts.map((work) => work.toCatalogJson()).toList(),
           'removedWorkIds': removed,
         },
       },

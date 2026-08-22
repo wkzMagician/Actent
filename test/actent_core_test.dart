@@ -200,7 +200,7 @@ void main() {
     );
 
     test(
-      'exports Work and device configuration without secrets or history',
+      'exports complete Work and device configuration without history',
       () async {
         await repository.saveMessage(message);
         await repository.saveWork(
@@ -228,7 +228,8 @@ void main() {
 
         final exported = await ActentConfigurationTransfer(repository).export();
         final encoded = exported.toString();
-        expect(encoded, isNot(contains('secret')));
+        expect(encoded, contains('secret-value'));
+        expect(encoded, contains('secret-token'));
         expect(exported['messages'], isNull);
         expect((exported['works'] as List).length, 1);
         expect((exported['devices'] as List).length, 1);
@@ -386,6 +387,10 @@ void main() {
           queue: WorkQueueCoordinator(repository: repository),
         );
         await router.sendCatalogSnapshot('phone');
+        final snapshot = connection.sent.single.payload['catalog'] as Map;
+        final snapshotWork = (snapshot['works'] as List).single as Map;
+        expect(snapshotWork['catalogOnly'], isTrue);
+        expect(snapshotWork['platformBindings'], isNull);
         connection.sent.clear();
         await repository.saveWork(
           Work(
@@ -433,6 +438,7 @@ void main() {
       await pumpEventQueue();
 
       expect(receipts.map((receipt) => receipt.status), [
+        WorkReceiptStatus.queued,
         WorkReceiptStatus.processing,
         WorkReceiptStatus.stored,
       ]);

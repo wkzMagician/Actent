@@ -82,8 +82,29 @@ class MainActivity : FlutterActivity() {
                 }
             }
             "launchIntent" -> launchIntent(call, result)
+            "queryIntentHandlers" -> queryIntentHandlers(call, result)
             else -> result.notImplemented()
         }
+    }
+
+    private fun queryIntentHandlers(call: MethodCall, result: MethodChannel.Result) {
+        val intent = Intent(call.argument<String>("action") ?: Intent.ACTION_SEND)
+        call.argument<String>("mimeType")?.let { intent.type = it }
+        intent.addCategory(Intent.CATEGORY_DEFAULT)
+        val handlers = packageManager.queryIntentActivities(
+            intent,
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        ).map { info ->
+            mapOf<String, Any?>(
+                "label" to info.loadLabel(packageManager).toString(),
+                "packageName" to info.activityInfo.packageName,
+                "componentName" to ComponentName(
+                    info.activityInfo.packageName,
+                    info.activityInfo.name,
+                ).flattenToString(),
+            )
+        }.distinctBy { it["componentName"] }
+        result.success(handlers)
     }
 
     private fun launchIntent(call: MethodCall, result: MethodChannel.Result) {

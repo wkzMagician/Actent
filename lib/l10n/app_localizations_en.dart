@@ -191,7 +191,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get activityReceived => 'Received';
 
   @override
+  String get activityQueued => 'Queued';
+
+  @override
   String get activityProcessing => 'Processing';
+
+  @override
+  String get activityCancelling => 'Cancelling';
+
+  @override
+  String get activityInterrupted => 'Interrupted';
 
   @override
   String get activityFailed => 'Processing failed';
@@ -221,10 +230,52 @@ class AppLocalizationsEn extends AppLocalizations {
   String get scriptWorkType => 'Script Work';
 
   @override
+  String get fileWorkType => 'Program or script file';
+
+  @override
+  String get shellWorkType => 'Shell script';
+
+  @override
+  String get addShellWork => 'Add shell script task';
+
+  @override
+  String get editShellWork => 'Edit shell script task';
+
+  @override
+  String get addFileWork => 'Add program or script task';
+
+  @override
+  String get editFileWork => 'Edit program or script task';
+
+  @override
+  String get programOrScriptFile => 'Program or script file';
+
+  @override
+  String get shell => 'Shell';
+
+  @override
+  String get shellSource => 'Shell script';
+
+  @override
   String get javaScriptWorkType => 'JavaScript Work';
 
   @override
   String get applicationWorkType => 'Application Work';
+
+  @override
+  String get intentAction => 'Action';
+
+  @override
+  String get chooseApplication => 'Choose application';
+
+  @override
+  String get noCompatibleApps => 'No compatible applications found';
+
+  @override
+  String get iosApplicationMode => 'Integration';
+
+  @override
+  String get shortcutName => 'Shortcut name';
 
   @override
   String get networkWorkType => 'Network Work';
@@ -240,6 +291,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get networkUrl => 'Network URL';
+
+  @override
+  String get networkMethod => 'Method';
+
+  @override
+  String get networkHeaders => 'Headers (one per line)';
+
+  @override
+  String get networkBody => 'Body';
 
   @override
   String get applicationUrl => 'Application URL or URL scheme';

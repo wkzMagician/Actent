@@ -61,4 +61,41 @@ void main() {
       throwsA(isA<WorkBindingException>()),
     );
   });
+
+  test('keeps shell and HTTP task bindings separate from catalog metadata', () {
+    final shell = Work(
+      id: 'shell',
+      revision: 1,
+      name: 'Shell',
+      ownerDeviceId: 'desktop',
+      platformBindings: const {
+        'kind': 'desktop-shell',
+        'shell': 'bash',
+        'source': 'cat',
+      },
+    );
+    expect(DesktopShellBinding.fromWork(shell).toConfig(shell).arguments, [
+      '-c',
+      'cat',
+    ]);
+    expect(shell.toCatalogJson(), isNot(contains('platformBindings')));
+
+    final http = Work(
+      id: 'http',
+      revision: 1,
+      name: 'Webhook',
+      ownerDeviceId: 'desktop',
+      platformBindings: const {
+        'kind': 'http',
+        'urlTemplate': 'https://example.test/{{content.text}}',
+        'method': 'PATCH',
+        'headers': {'Content-Type': 'application/json'},
+        'bodyTemplate': '{"text":"{{content.text}}"}',
+      },
+    );
+    final spec = AndroidHttpBinding.fromWork(http).spec;
+    expect(spec.method, 'PATCH');
+    expect(spec.headers['Content-Type'], 'application/json');
+    expect(spec.bodyTemplate, contains('content.text'));
+  });
 }

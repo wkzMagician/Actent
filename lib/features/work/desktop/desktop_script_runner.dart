@@ -14,6 +14,7 @@ class DesktopScriptConfig {
     Map<String, String> environment = const {},
     Map<String, String> secretEnvironment = const {},
     this.timeout = const Duration(hours: 24),
+    this.validateExecutable = true,
   }) : arguments = List.unmodifiable(arguments),
        environment = Map.unmodifiable(environment),
        secretEnvironment = Map.unmodifiable(secretEnvironment);
@@ -24,13 +25,14 @@ class DesktopScriptConfig {
   final Map<String, String> environment;
   final Map<String, String> secretEnvironment;
   final Duration timeout;
+  final bool validateExecutable;
 
   Future<void> validate() async {
     if (executable.trim().isEmpty) {
       throw ArgumentError.value(executable, 'executable');
     }
     if (timeout <= Duration.zero) throw ArgumentError.value(timeout, 'timeout');
-    if (!await File(executable).exists()) {
+    if (validateExecutable && !await File(executable).exists()) {
       throw FileSystemException('script executable does not exist', executable);
     }
     if (workingDirectory != null &&
@@ -211,6 +213,7 @@ class DesktopScriptRunner implements WorkRunner {
       environment: environment,
       secretEnvironment: config.secretEnvironment,
       timeout: config.timeout,
+      validateExecutable: config.validateExecutable,
     );
   }
 
@@ -239,4 +242,38 @@ class DesktopScriptRunner implements WorkRunner {
     await process.terminateTree();
     return -1;
   }
+}
+
+/// Runs a user-selected program or script through a fixed argument list.
+class DesktopFileRunner extends DesktopScriptRunner {
+  DesktopFileRunner({required String path, super.secrets})
+    : super(config: _configForPath(path));
+}
+
+DesktopScriptConfig _configForPath(String path) {
+  final extension = path.contains('.')
+      ? path.substring(path.lastIndexOf('.') + 1).toLowerCase()
+      : '';
+  final interpreter = switch (extension) {
+    'py' => Platform.isWindows ? 'python.exe' : 'python3',
+    'ps1' => Platform.isWindows ? 'powershell.exe' : 'pwsh',
+    'sh' || 'bash' => 'bash',
+    'zsh' => 'zsh',
+    'js' || 'mjs' => Platform.isWindows ? 'node.exe' : 'node',
+    'cmd' || 'bat' => 'cmd.exe',
+    _ => null,
+  };
+  if (interpreter == null) {
+    return DesktopScriptConfig(executable: path);
+  }
+  final arguments = switch (extension) {
+    'ps1' => ['-NoProfile', '-NonInteractive', '-File', path],
+    'cmd' || 'bat' => ['/d', '/s', '/c', path],
+    _ => [path],
+  };
+  return DesktopScriptConfig(
+    executable: interpreter,
+    arguments: arguments,
+    validateExecutable: false,
+  );
 }

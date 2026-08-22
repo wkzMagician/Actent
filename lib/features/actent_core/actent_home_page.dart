@@ -22,6 +22,7 @@ import 'attachment_retention.dart';
 import 'actent_store.dart';
 import '../../l10n/app_localizations.dart';
 import '../../app/pairing_configuration.dart';
+import '../actent_platform/work_definition_picker.dart';
 
 class ActentHomePage extends StatefulWidget {
   const ActentHomePage({
@@ -105,6 +106,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<Work> _works = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
+  String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
@@ -118,7 +120,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
   bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
-  bool get _supportsNetworkWork => _isAndroid || _isIos;
+  bool get _supportsNetworkWork => true;
+  bool get _supportsDesktopWork => !kIsWeb && widget.canEditWorks;
 
   List<_ActentPageData> _pages(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -285,7 +288,23 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   secrets: widget.desktopSecrets,
                 ),
               );
-            case 'web-js' when kIsWeb:
+            case 'desktop-file' when _supportsDesktopWork:
+              queue.register(
+                work.id,
+                DesktopFileRunner(
+                  path: DesktopFileBinding.fromWork(work).path,
+                  secrets: widget.desktopSecrets,
+                ),
+              );
+            case 'desktop-shell' when _supportsDesktopWork:
+              queue.register(
+                work.id,
+                DesktopScriptRunner(
+                  config: DesktopShellBinding.fromWork(work).toConfig(work),
+                  secrets: widget.desktopSecrets,
+                ),
+              );
+            case 'web-js':
               queue.register(
                 work.id,
                 WebJsWorkRunner(WebJsBinding.fromWork(work).toConfig()),
@@ -300,7 +319,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   launcher: bridge.intentLauncher,
                 ),
               );
-            case 'android-http' when _supportsNetworkWork:
+            case 'android-http' || 'http' when _supportsNetworkWork:
               queue.register(
                 work.id,
                 AndroidHttpRunner(
@@ -784,9 +803,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
                       ),
                       title: Text(work.name),
                       subtitle: Text(
-                        '${_workOwnerLabel(work, l10n)} · '
-                        '${work.id} · revision ${work.revision} · '
-                        '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
+                        '${_workKindLabel(work, l10n)} · '
+                        '${work.enabled ? l10n.enable : l10n.disable}',
                       ),
                       trailing: _isLocalWork(work)
                           ? PopupMenuButton<String>(
@@ -845,8 +863,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   bool _canEditWork(Work work) => switch (work.platformBindings['kind']) {
     'null' => true,
-    'web-js' => kIsWeb,
-    'desktop-script' => widget.canEditWorks,
+    'web-js' => true,
+    'desktop-script' => _supportsDesktopWork,
+    'desktop-file' || 'desktop-shell' => _supportsDesktopWork,
     _ => false,
   };
 
@@ -857,6 +876,17 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
     return work.ownerDeviceId;
   }
+
+  String _workKindLabel(Work work, AppLocalizations l10n) =>
+      switch (work.platformBindings['kind']) {
+        'null' => l10n.nullWorkType,
+        'desktop-shell' => l10n.shellWorkType,
+        'desktop-file' || 'desktop-script' => l10n.fileWorkType,
+        'web-js' => l10n.javaScriptWorkType,
+        'android-intent' || 'ios-url' => l10n.applicationWorkType,
+        'android-http' || 'http' => l10n.networkWorkType,
+        _ => work.platformBindings['kind'] as String? ?? l10n.works,
+      };
 
   String _attachmentRetentionLabel(
     AttachmentRetention value,
@@ -870,72 +900,113 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _showAddWork() async {
     final l10n = AppLocalizations.of(context)!;
-    final type = await showDialog<String>(
+    final workName = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.chooseWorkType),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.archive_outlined),
-                title: Text(l10n.nullWorkType),
-                onTap: () => Navigator.pop(dialogContext, 'null'),
-              ),
-              if (widget.canEditWorks)
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.addWork),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: InputDecoration(labelText: l10n.name),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (workName == null || workName.isEmpty) return;
+    if (!mounted) return;
+    _pendingWorkName = workName;
+    try {
+      final type = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(l10n.chooseWorkType),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 ListTile(
-                  leading: const Icon(Icons.terminal),
-                  title: Text(l10n.scriptWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'script'),
+                  leading: const Icon(Icons.archive_outlined),
+                  title: Text(l10n.nullWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'null'),
                 ),
-              if (kIsWeb)
+                if (_supportsDesktopWork)
+                  ListTile(
+                    leading: const Icon(Icons.terminal),
+                    title: Text(l10n.fileWorkType),
+                    onTap: () => Navigator.pop(dialogContext, 'file'),
+                  ),
+                if (_supportsDesktopWork)
+                  ListTile(
+                    leading: const Icon(Icons.code),
+                    title: Text(l10n.shellWorkType),
+                    onTap: () => Navigator.pop(dialogContext, 'shell'),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.javascript),
                   title: Text(l10n.javaScriptWorkType),
                   onTap: () => Navigator.pop(dialogContext, 'javascript'),
                 ),
-              if (_isAndroid && widget.shareBridge != null)
-                ListTile(
-                  leading: const Icon(Icons.apps_outlined),
-                  title: Text(l10n.applicationWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'application'),
-                ),
-              if (_isIos)
-                ListTile(
-                  leading: const Icon(Icons.apps_outlined),
-                  title: Text(l10n.applicationWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'iosApplication'),
-                ),
-              if (_supportsNetworkWork)
-                ListTile(
-                  leading: const Icon(Icons.http),
-                  title: Text(l10n.networkWorkType),
-                  onTap: () => Navigator.pop(dialogContext, 'network'),
-                ),
-            ],
+                if (_isAndroid && widget.shareBridge != null)
+                  ListTile(
+                    leading: const Icon(Icons.apps_outlined),
+                    title: Text(l10n.applicationWorkType),
+                    onTap: () => Navigator.pop(dialogContext, 'application'),
+                  ),
+                if (_isIos)
+                  ListTile(
+                    leading: const Icon(Icons.apps_outlined),
+                    title: Text(l10n.applicationWorkType),
+                    onTap: () => Navigator.pop(dialogContext, 'iosApplication'),
+                  ),
+                if (_supportsNetworkWork)
+                  ListTile(
+                    leading: const Icon(Icons.http),
+                    title: Text(l10n.networkWorkType),
+                    onTap: () => Navigator.pop(dialogContext, 'network'),
+                  ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    switch (type) {
-      case 'null':
-        await _addNullWork();
-      case 'script':
-        await _addDesktopWork();
-      case 'javascript':
-        await _addWebJsWork();
-      case 'application':
-        await _addAndroidApplicationWork();
-      case 'iosApplication':
-        await _addIosApplicationWork();
-      case 'network':
-        await _addAndroidNetworkWork();
+      );
+      switch (type) {
+        case 'null':
+          await _addNullWork();
+        case 'file':
+          await _addDesktopFileWork();
+        case 'shell':
+          await _addDesktopShellWork();
+        case 'javascript':
+          await _addWebJsWork();
+        case 'application':
+          await _addAndroidApplicationWork();
+        case 'iosApplication':
+          await _addIosApplicationWork();
+        case 'network':
+          await _addAndroidNetworkWork();
+      }
+    } finally {
+      _pendingWorkName = null;
     }
   }
 
-  Future<void> _addDesktopWork() => _editDesktopWork();
+  Future<void> _addDesktopFileWork() => _editDesktopFileWork();
+
+  Future<void> _addDesktopShellWork() => _editDesktopShellWork();
 
   Future<void> _addWebJsWork() => _editWebJsWork();
 
@@ -946,7 +1017,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final name = await showDialog<String>(
       context: context,
       builder: (dialogContext) {
-        final controller = TextEditingController();
+        final controller = TextEditingController(text: _pendingWorkName ?? '');
         return AlertDialog(
           title: Text(l10n.addWork),
           content: TextField(
@@ -985,25 +1056,39 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _addAndroidApplicationWork() async {
     final l10n = AppLocalizations.of(context)!;
-    final values = await showDialog<(String, String)?>(
+    final values = await showDialog<(String, String, String)?>(
       context: context,
       builder: (dialogContext) {
-        final name = TextEditingController();
-        final packageName = TextEditingController();
+        final name = TextEditingController(text: _pendingWorkName ?? '');
+        var action = 'android.intent.action.SEND';
         return AlertDialog(
           title: Text(l10n.addApplicationWork),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: InputDecoration(labelText: l10n.name),
-              ),
-              TextField(
-                controller: packageName,
-                decoration: InputDecoration(labelText: l10n.androidPackageName),
-              ),
-            ],
+          content: StatefulBuilder(
+            builder: (context, setState) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.name),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: action,
+                  decoration: InputDecoration(labelText: l10n.intentAction),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'android.intent.action.SEND',
+                      child: Text('Share text or files'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'android.intent.action.VIEW',
+                      child: Text('Open a URL'),
+                    ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => action = value ?? action),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1013,7 +1098,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, (
                 name.text.trim(),
-                packageName.text.trim(),
+                action,
+                action == 'android.intent.action.VIEW'
+                    ? 'text/uri-list'
+                    : 'text/plain',
               )),
               child: Text(l10n.save),
             ),
@@ -1022,42 +1110,117 @@ class _ActentHomePageState extends State<ActentHomePage> {
       },
     );
     if (values == null || values.$1.isEmpty) return;
+    final bridge = widget.shareBridge;
+    if (bridge == null) return;
+    final targets = await bridge.findIntentTargets(
+      action: values.$2,
+      mimeType: values.$3,
+    );
+    if (!mounted) return;
+    if (targets.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l10n.noCompatibleApps)));
+      return;
+    }
+    final target = await showDialog<AndroidIntentTarget>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.chooseApplication),
+        content: SizedBox(
+          width: 420,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: targets.length,
+            itemBuilder: (context, index) {
+              final item = targets[index];
+              return ListTile(
+                title: Text(item.label),
+                subtitle: Text(item.packageName),
+                onTap: () => Navigator.pop(dialogContext, item),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    if (target == null) return;
     await _saveCreatedAndroidWork(
       name: values.$1,
       idPrefix: 'android-intent',
       bindings: {
         'kind': 'android-intent',
-        'action': 'android.intent.action.SEND',
+        'action': values.$2,
+        'mimeType': values.$3,
         'categories': const <String>[],
         'extras': const <String, Object?>{},
-        'chooser': true,
-        'attachmentPlacement': 'streams',
-        if (values.$2.isNotEmpty) 'packageName': values.$2,
+        'chooser': false,
+        'attachmentPlacement': values.$2 == 'android.intent.action.VIEW'
+            ? 'none'
+            : 'streams',
+        'packageName': target.packageName,
+        'componentName': target.componentName,
       },
     );
   }
 
   Future<void> _addAndroidNetworkWork() async {
     final l10n = AppLocalizations.of(context)!;
-    final values = await showDialog<(String, String)?>(
+    final values = await showDialog<(String, String, String, String, String)?>(
       context: context,
       builder: (dialogContext) {
-        final name = TextEditingController();
+        final name = TextEditingController(text: _pendingWorkName ?? '');
         final url = TextEditingController(text: 'https://');
+        final headers = TextEditingController();
+        final body = TextEditingController();
+        var method = 'POST';
         return AlertDialog(
           title: Text(l10n.addNetworkWork),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: InputDecoration(labelText: l10n.name),
-              ),
-              TextField(
-                controller: url,
-                decoration: InputDecoration(labelText: l10n.networkUrl),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.name),
+                ),
+                TextField(
+                  controller: url,
+                  decoration: InputDecoration(labelText: l10n.networkUrl),
+                ),
+                StatefulBuilder(
+                  builder: (context, setState) =>
+                      DropdownButtonFormField<String>(
+                        initialValue: method,
+                        decoration: InputDecoration(
+                          labelText: l10n.networkMethod,
+                        ),
+                        items: const ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(value),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) =>
+                            setState(() => method = value ?? 'POST'),
+                      ),
+                ),
+                TextField(
+                  controller: headers,
+                  decoration: InputDecoration(
+                    labelText: l10n.networkHeaders,
+                    hintText: 'Content-Type: application/json',
+                  ),
+                  maxLines: 3,
+                ),
+                TextField(
+                  controller: body,
+                  decoration: InputDecoration(labelText: l10n.networkBody),
+                  maxLines: 5,
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1068,6 +1231,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
               onPressed: () => Navigator.pop(dialogContext, (
                 name.text.trim(),
                 url.text.trim(),
+                method,
+                headers.text,
+                body.text,
               )),
               child: Text(l10n.save),
             ),
@@ -1076,40 +1242,76 @@ class _ActentHomePageState extends State<ActentHomePage> {
       },
     );
     if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
+    final headers = <String, String>{};
+    for (final line in values.$4.split(RegExp(r'\r?\n'))) {
+      final separator = line.indexOf(':');
+      if (separator > 0) {
+        headers[line.substring(0, separator).trim()] = line
+            .substring(separator + 1)
+            .trim();
+      }
+    }
     await _saveCreatedAndroidWork(
       name: values.$1,
-      idPrefix: 'android-http',
+      idPrefix: 'http',
       bindings: {
-        'kind': 'android-http',
+        'kind': 'http',
         'urlTemplate': values.$2,
-        'method': 'POST',
-        'headers': const <String, String>{},
-        'bodyTemplate': '{{content.text}}',
+        'method': values.$3,
+        'headers': headers,
+        if (values.$5.trim().isNotEmpty)
+          'bodyTemplate': values.$5
+        else if (values.$3 != 'GET' && values.$3 != 'DELETE')
+          'bodyTemplate': '{{content.text}}',
       },
     );
   }
 
   Future<void> _addIosApplicationWork() async {
     final l10n = AppLocalizations.of(context)!;
-    final values = await showDialog<(String, String)?>(
+    final values = await showDialog<(String, String, String)?>(
       context: context,
       builder: (dialogContext) {
-        final name = TextEditingController();
+        final name = TextEditingController(text: _pendingWorkName ?? '');
         final url = TextEditingController();
+        var mode = 'url';
         return AlertDialog(
           title: Text(l10n.addApplicationWork),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: name,
-                decoration: InputDecoration(labelText: l10n.name),
-              ),
-              TextField(
-                controller: url,
-                decoration: InputDecoration(labelText: l10n.applicationUrl),
-              ),
-            ],
+          content: StatefulBuilder(
+            builder: (context, setState) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.name),
+                ),
+                DropdownButtonFormField<String>(
+                  initialValue: mode,
+                  decoration: InputDecoration(
+                    labelText: l10n.iosApplicationMode,
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'url',
+                      child: Text(l10n.applicationUrl),
+                    ),
+                    DropdownMenuItem(
+                      value: 'shortcut',
+                      child: Text(l10n.shortcutName),
+                    ),
+                  ],
+                  onChanged: (value) => setState(() => mode = value ?? mode),
+                ),
+                TextField(
+                  controller: url,
+                  decoration: InputDecoration(
+                    labelText: mode == 'shortcut'
+                        ? l10n.shortcutName
+                        : l10n.applicationUrl,
+                  ),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -1120,6 +1322,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
               onPressed: () => Navigator.pop(dialogContext, (
                 name.text.trim(),
                 url.text.trim(),
+                mode,
               )),
               child: Text(l10n.save),
             ),
@@ -1128,10 +1331,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
       },
     );
     if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
+    final urlTemplate = values.$3 == 'shortcut'
+        ? 'shortcuts://run-shortcut?name=${Uri.encodeComponent(values.$2)}&input={{content.text}}'
+        : values.$2;
     await _saveCreatedAndroidWork(
       name: values.$1,
       idPrefix: 'ios-url',
-      bindings: {'kind': 'ios-url', 'urlTemplate': values.$2},
+      bindings: {'kind': 'ios-url', 'urlTemplate': urlTemplate},
     );
   }
 
@@ -1158,10 +1364,176 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _editWork(Work work) => switch (work.platformBindings['kind']) {
     'null' => _editNullWork(work),
-    'web-js' when kIsWeb => _editWebJsWork(work),
-    'desktop-script' when widget.canEditWorks => _editDesktopWork(work),
+    'web-js' => _editWebJsWork(work),
+    'desktop-script' when _supportsDesktopWork => _editDesktopWork(work),
+    'desktop-file' when _supportsDesktopWork => _editDesktopFileWork(work),
+    'desktop-shell' when _supportsDesktopWork => _editDesktopShellWork(work),
     _ => Future<void>.value(),
   };
+
+  Future<void> _editDesktopShellWork([Work? existing]) async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showDialog<(String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController(
+          text: existing?.name ?? _pendingWorkName ?? '',
+        );
+        final source = TextEditingController(
+          text: existing?.platformBindings['source'] as String? ?? '',
+        );
+        final shell = defaultTargetPlatform == TargetPlatform.windows
+            ? 'powershell.exe'
+            : defaultTargetPlatform == TargetPlatform.macOS
+            ? 'zsh'
+            : 'bash';
+        return AlertDialog(
+          title: Text(
+            existing == null ? l10n.addShellWork : l10n.editShellWork,
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.name),
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('${l10n.shell}: $shell'),
+                ),
+                TextField(
+                  controller: source,
+                  decoration: InputDecoration(labelText: l10n.shellSource),
+                  minLines: 10,
+                  maxLines: 18,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, (name.text.trim(), source.text)),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty || values.$2.trim().isEmpty) return;
+    final repository = widget.repository;
+    if (repository == null) return;
+    final shell = defaultTargetPlatform == TargetPlatform.windows
+        ? 'powershell.exe'
+        : defaultTargetPlatform == TargetPlatform.macOS
+        ? 'zsh'
+        : 'bash';
+    await repository.saveWork(
+      Work(
+        id: existing?.id ?? 'shell-${DateTime.now().microsecondsSinceEpoch}',
+        revision: (existing?.revision ?? 0) + 1,
+        name: values.$1,
+        ownerDeviceId: widget.deviceId ?? 'local-device',
+        allowedSourceDeviceIds: existing?.allowedSourceDeviceIds ?? const {},
+        acceptedContentTypes: ActentContentType.values.toSet(),
+        timeout: existing?.timeout ?? const Duration(hours: 24),
+        queueLimit: existing?.queueLimit ?? 10,
+        platformBindings: {
+          'kind': 'desktop-shell',
+          'shell': shell,
+          'source': values.$2,
+        },
+        catalogVisibility: existing?.catalogVisibility ?? const {},
+      ),
+    );
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
+  }
+
+  Future<void> _editDesktopFileWork([Work? existing]) async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showDialog<(String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController(
+          text: existing?.name ?? _pendingWorkName ?? '',
+        );
+        final path = TextEditingController(
+          text: existing?.platformBindings['path'] as String? ?? '',
+        );
+        return StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: Text(
+              existing == null ? l10n.addFileWork : l10n.editFileWork,
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: name,
+                  decoration: InputDecoration(labelText: l10n.name),
+                ),
+                TextField(
+                  controller: path,
+                  readOnly: true,
+                  decoration: InputDecoration(
+                    labelText: l10n.programOrScriptFile,
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.folder_open),
+                      onPressed: () async {
+                        final selected = await pickWorkDefinitionFile();
+                        if (selected != null) {
+                          setState(() => path.text = selected);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(l10n.cancel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, (
+                  name.text.trim(),
+                  path.text.trim(),
+                )),
+                child: Text(l10n.save),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
+    final repository = widget.repository;
+    if (repository == null) return;
+    await repository.saveWork(
+      Work(
+        id: existing?.id ?? 'file-${DateTime.now().microsecondsSinceEpoch}',
+        revision: (existing?.revision ?? 0) + 1,
+        name: values.$1,
+        ownerDeviceId: widget.deviceId ?? 'local-device',
+        allowedSourceDeviceIds: existing?.allowedSourceDeviceIds ?? const {},
+        acceptedContentTypes: ActentContentType.values.toSet(),
+        timeout: existing?.timeout ?? const Duration(hours: 24),
+        queueLimit: existing?.queueLimit ?? 10,
+        platformBindings: {'kind': 'desktop-file', 'path': values.$2},
+        catalogVisibility: existing?.catalogVisibility ?? const {},
+      ),
+    );
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
+  }
 
   Future<void> _editNullWork(Work existing) async {
     final l10n = AppLocalizations.of(context)!;
@@ -1217,7 +1589,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final values = await showDialog<(String, String, String)?>(
       context: context,
       builder: (dialogContext) {
-        final name = TextEditingController(text: existing?.name ?? '');
+        final name = TextEditingController(
+          text: existing?.name ?? _pendingWorkName ?? '',
+        );
         final source = TextEditingController(
           text:
               existing?.platformBindings['source'] as String? ??
@@ -2249,7 +2623,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
   _ActivityStatus _activityStatusFromReceipt(WorkReceiptStatus status) =>
       switch (status) {
         WorkReceiptStatus.stored => _ActivityStatus.received,
+        WorkReceiptStatus.queued => _ActivityStatus.queued,
         WorkReceiptStatus.processing => _ActivityStatus.processing,
+        WorkReceiptStatus.cancelling => _ActivityStatus.cancelling,
+        WorkReceiptStatus.interrupted => _ActivityStatus.interrupted,
         WorkReceiptStatus.succeeded => _ActivityStatus.succeeded,
         WorkReceiptStatus.failed ||
         WorkReceiptStatus.expired ||
@@ -2261,7 +2638,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
         _ActivityStatus.sending => l10n.activitySending,
         _ActivityStatus.sendFailed => l10n.activitySendFailed,
         _ActivityStatus.received => l10n.activityReceived,
+        _ActivityStatus.queued => l10n.activityQueued,
         _ActivityStatus.processing => l10n.activityProcessing,
+        _ActivityStatus.cancelling => l10n.activityCancelling,
+        _ActivityStatus.interrupted => l10n.activityInterrupted,
         _ActivityStatus.failed => l10n.activityFailed,
         _ActivityStatus.succeeded => l10n.activitySucceeded,
       };
@@ -2520,7 +2900,10 @@ enum _ActivityStatus {
   sending,
   sendFailed,
   received,
+  queued,
   processing,
+  cancelling,
+  interrupted,
   failed,
   succeeded,
 }

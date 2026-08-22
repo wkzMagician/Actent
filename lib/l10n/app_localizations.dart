@@ -428,11 +428,29 @@ abstract class AppLocalizations {
   /// **'Received'**
   String get activityReceived;
 
+  /// No description provided for @activityQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get activityQueued;
+
   /// No description provided for @activityProcessing.
   ///
   /// In en, this message translates to:
   /// **'Processing'**
   String get activityProcessing;
+
+  /// No description provided for @activityCancelling.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelling'**
+  String get activityCancelling;
+
+  /// No description provided for @activityInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Interrupted'**
+  String get activityInterrupted;
 
   /// No description provided for @activityFailed.
   ///
@@ -488,6 +506,60 @@ abstract class AppLocalizations {
   /// **'Script Work'**
   String get scriptWorkType;
 
+  /// No description provided for @fileWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Program or script file'**
+  String get fileWorkType;
+
+  /// No description provided for @shellWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Shell script'**
+  String get shellWorkType;
+
+  /// No description provided for @addShellWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add shell script task'**
+  String get addShellWork;
+
+  /// No description provided for @editShellWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit shell script task'**
+  String get editShellWork;
+
+  /// No description provided for @addFileWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add program or script task'**
+  String get addFileWork;
+
+  /// No description provided for @editFileWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit program or script task'**
+  String get editFileWork;
+
+  /// No description provided for @programOrScriptFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Program or script file'**
+  String get programOrScriptFile;
+
+  /// No description provided for @shell.
+  ///
+  /// In en, this message translates to:
+  /// **'Shell'**
+  String get shell;
+
+  /// No description provided for @shellSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Shell script'**
+  String get shellSource;
+
   /// No description provided for @javaScriptWorkType.
   ///
   /// In en, this message translates to:
@@ -499,6 +571,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Application Work'**
   String get applicationWorkType;
+
+  /// No description provided for @intentAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Action'**
+  String get intentAction;
+
+  /// No description provided for @chooseApplication.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose application'**
+  String get chooseApplication;
+
+  /// No description provided for @noCompatibleApps.
+  ///
+  /// In en, this message translates to:
+  /// **'No compatible applications found'**
+  String get noCompatibleApps;
+
+  /// No description provided for @iosApplicationMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Integration'**
+  String get iosApplicationMode;
+
+  /// No description provided for @shortcutName.
+  ///
+  /// In en, this message translates to:
+  /// **'Shortcut name'**
+  String get shortcutName;
 
   /// No description provided for @networkWorkType.
   ///
@@ -529,6 +631,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Network URL'**
   String get networkUrl;
+
+  /// No description provided for @networkMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Method'**
+  String get networkMethod;
+
+  /// No description provided for @networkHeaders.
+  ///
+  /// In en, this message translates to:
+  /// **'Headers (one per line)'**
+  String get networkHeaders;
+
+  /// No description provided for @networkBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Body'**
+  String get networkBody;
 
   /// No description provided for @applicationUrl.
   ///

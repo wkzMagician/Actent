@@ -65,6 +65,39 @@ class DesktopScriptBinding {
   );
 }
 
+class DesktopShellBinding {
+  const DesktopShellBinding({required this.source, required this.shell});
+
+  final String source;
+  final String shell;
+
+  factory DesktopShellBinding.fromWork(Work work) {
+    final binding = _binding(work, 'desktop-shell');
+    return DesktopShellBinding(
+      source: _string(binding, 'source'),
+      shell: _optionalString(binding, 'shell') ?? 'bash',
+    );
+  }
+
+  DesktopScriptConfig toConfig(Work work) => DesktopScriptConfig(
+    executable: shell,
+    arguments: ['-c', source],
+    timeout: work.timeout,
+    validateExecutable: false,
+  );
+}
+
+class DesktopFileBinding {
+  const DesktopFileBinding({required this.path});
+
+  final String path;
+
+  factory DesktopFileBinding.fromWork(Work work) {
+    final binding = _binding(work, 'desktop-file');
+    return DesktopFileBinding(path: _string(binding, 'path'));
+  }
+}
+
 class AndroidIntentBinding {
   const AndroidIntentBinding(this.spec);
 
@@ -103,7 +136,12 @@ class AndroidHttpBinding {
   final AndroidHttpSpec spec;
 
   factory AndroidHttpBinding.fromWork(Work work) {
-    final binding = _binding(work, 'android-http');
+    final binding = Map<String, Object?>.from(work.platformBindings);
+    if (binding['kind'] != 'android-http' && binding['kind'] != 'http') {
+      throw WorkBindingException(
+        'Work ${work.id} requires http binding, got ${binding['kind']}',
+      );
+    }
     return AndroidHttpBinding(
       AndroidHttpSpec(
         urlTemplate: _string(binding, 'urlTemplate'),
