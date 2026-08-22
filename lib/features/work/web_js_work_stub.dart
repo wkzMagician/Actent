@@ -4,6 +4,7 @@ import 'package:flutter_js/flutter_js.dart';
 
 import '../actent_core/actent_models.dart';
 import 'work_runner.dart';
+import 'work_output.dart';
 
 class WebJsWorkConfig {
   const WebJsWorkConfig({required this.source, this.allowedHosts = const []});
@@ -52,10 +53,8 @@ class WebJsWorkRunner implements WorkRunner {
       if (cancellation.isCancelled) {
         return const WorkRunResult.failure(errorCode: 'cancelled');
       }
-      final summary = result.stringResult;
-      return WorkRunResult.success(
-        summary: summary.length > 512 ? summary.substring(0, 512) : summary,
-      );
+      final value = jsonDecode(result.stringResult);
+      return WorkRunResult.success(output: parseDynamicWorkOutput(work, value));
     } on Object catch (error) {
       return WorkRunResult.failure(
         errorCode: 'script_error',

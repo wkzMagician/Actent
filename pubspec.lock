@@ -139,11 +139,11 @@ packages:
     dependency: "direct main"
     description:
       path: "packages/dartloom_messaging"
-      ref: main
-      resolved-ref: b9e39e0d38ea21ae05cca522f6c4ea65d950c7b7
+      ref: "831191f"
+      resolved-ref: "831191faa14c5798c02de5aad2fd1b6b8e0e61d5"
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
-    version: "0.1.0"
+    version: "0.2.0"
   dartloom_pairing:
     dependency: "direct main"
     description:

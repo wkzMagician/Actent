@@ -580,6 +580,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final now = DateTime.now().toUtc();
     final id = 'manual-${now.microsecondsSinceEpoch}';
     final key = switch (type) {
+      ActentContentType.none => 'text',
       ActentContentType.text => 'text',
       ActentContentType.url => 'url',
       ActentContentType.json => 'json',
@@ -600,6 +601,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   String _contentTypeLabel(ActentContentType type, AppLocalizations l10n) =>
       switch (type) {
+        ActentContentType.none => l10n.inputText,
         ActentContentType.text => l10n.inputText,
         ActentContentType.url => l10n.inputUrl,
         ActentContentType.image => l10n.inputImage,
@@ -608,6 +610,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       };
 
   IconData _contentTypeIcon(ActentContentType type) => switch (type) {
+    ActentContentType.none => Icons.text_fields,
     ActentContentType.text => Icons.text_fields,
     ActentContentType.url => Icons.link,
     ActentContentType.image => Icons.image_outlined,

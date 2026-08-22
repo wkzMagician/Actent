@@ -102,6 +102,26 @@ class ActentRepository {
 
   Future<void> deleteWork(String id) => store.delete(_key('works', id));
 
+  Future<void> saveWorkflow(Workflow workflow) =>
+      store.write(_key('workflows', workflow.id), workflow.toJson());
+
+  Future<Workflow?> getWorkflow(String id) =>
+      _read(_key('workflows', id), Workflow.fromJson);
+
+  Future<List<Workflow>> listWorkflows() =>
+      _list('workflows/', Workflow.fromJson);
+
+  Future<void> deleteWorkflow(String id) => store.delete(_key('workflows', id));
+
+  Future<void> saveWorkflowExecution(WorkflowExecution execution) =>
+      store.write(_key('workflowExecutions', execution.id), execution.toJson());
+
+  Future<WorkflowExecution?> getWorkflowExecution(String id) =>
+      _read(_key('workflowExecutions', id), WorkflowExecution.fromJson);
+
+  Future<List<WorkflowExecution>> listWorkflowExecutions() =>
+      _list('workflowExecutions/', WorkflowExecution.fromJson);
+
   Future<void> saveDevice(Device device) =>
       store.write(_key('devices', device.id), device.toJson());
 

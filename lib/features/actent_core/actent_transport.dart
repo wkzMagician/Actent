@@ -13,6 +13,7 @@ import '../messaging/messaging_packet.dart';
 import '../messaging/packet_crypto.dart';
 import '../messaging/seen_packet_store.dart';
 import 'actent_models.dart';
+import 'actent_attachment_transfer.dart';
 import 'actent_router.dart';
 import 'actent_store.dart';
 import 'secret_repository.dart';
@@ -104,6 +105,8 @@ class ActentTransportService implements MessageConnection {
   StreamSubscription<MessagingPacket>? _subscription;
   LanTlsPacketServer? _lanServer;
   bool _started = false;
+  final Map<String, _IncomingAttachmentTransfer> _incomingTransfers = {};
+  final Map<String, Completer<Map<String, Set<int>>>> _resumeWaiters = {};
 
   String? get lanHost => lanServerConfig?.host;
   int? get lanPort => _lanServer?.boundPort;
@@ -165,8 +168,63 @@ class ActentTransportService implements MessageConnection {
     if (device == null || !device.authorized) {
       throw StateError('paired device is unavailable: $recipientId');
     }
+    final prepared = await _prepareStreamingPayload(payload);
+    if (prepared.transfers.isEmpty) {
+      await _sendTransportPayload(recipientId, prepared.control);
+      return;
+    }
+    final requestId = prepared.requestId;
+    final resumeWaiter = Completer<Map<String, Set<int>>>();
+    // Register before publishing the offer: a LAN receiver can answer before
+    // the publish call returns.
+    _resumeWaiters[requestId] = resumeWaiter;
+    await _sendTransportPayload(recipientId, prepared.control);
+    final resume = await resumeWaiter.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => <String, Set<int>>{},
+    );
+    _resumeWaiters.remove(requestId);
+    for (final transfer in prepared.transfers) {
+      final received = resume[transfer.attachmentId] ?? const <int>{};
+      for (var index = 0; index < transfer.manifest.totalChunks; index++) {
+        if (received.contains(index)) continue;
+        final offset = index * transfer.manifest.chunkSize;
+        final length = min(
+          transfer.manifest.chunkSize,
+          transfer.manifest.byteLength - offset,
+        );
+        final bytes = await transfer.source.read(offset, length);
+        final chunk = await const AttachmentChunker().encryptChunk(
+          manifest: transfer.manifest,
+          plaintext: bytes,
+          index: index,
+          key: transfer.key,
+        );
+        await _sendTransportPayload(recipientId, {
+          'type': 'attachmentChunk',
+          'schemaVersion': actentSchemaVersion,
+          'requestId': requestId,
+          'attachmentId': transfer.attachmentId,
+          'chunk': chunk.toJson(),
+        });
+      }
+    }
+    await _sendTransportPayload(recipientId, {
+      'type': 'attachmentCommit',
+      'schemaVersion': actentSchemaVersion,
+      'requestId': requestId,
+    });
+  }
+
+  Future<void> _sendTransportPayload(
+    String recipientId,
+    Map<String, Object?> transportPayload,
+  ) async {
+    final device = await repository.getDevice(recipientId);
+    if (device == null || !device.authorized) {
+      throw StateError('paired device is unavailable: $recipientId');
+    }
     final remoteKey = _decodePublicKey(device.publicKey);
-    final transportPayload = await _preparePayload(payload);
     final packet = await PacketCrypto().encrypt(
       sender: identity,
       recipientPublicKey: remoteKey,
@@ -210,7 +268,6 @@ class ActentTransportService implements MessageConnection {
       );
       final router = _router;
       if (router == null) return;
-      final materialized = await _materializeAttachments(payload);
       switch (payload['type']) {
         case 'catalogSnapshot':
           await router.receiveCatalogSnapshot(
@@ -230,16 +287,24 @@ class ActentTransportService implements MessageConnection {
         case 'pairingRemoved':
           await router.receivePairingRemoved(packet.senderId);
         case 'workRequest':
+          if (payload['attachmentTransfers'] is List) {
+            await _beginIncomingAttachmentTransfer(payload, packet.senderId);
+          } else {
+            await router.receive(
+              payload,
+              authenticatedSenderId: packet.senderId,
+            );
+          }
+        case 'attachmentChunk':
+          await _receiveAttachmentChunk(payload);
+        case 'attachmentCommit':
+          await _commitIncomingAttachmentTransfer(payload, router);
+        case 'attachmentResume':
+          _receiveAttachmentResume(payload);
         case 'workReceipt':
-          await router.receive(
-            materialized,
-            authenticatedSenderId: packet.senderId,
-          );
+          await router.receive(payload, authenticatedSenderId: packet.senderId);
         case 'workCancel':
-          await router.receive(
-            materialized,
-            authenticatedSenderId: packet.senderId,
-          );
+          await router.receive(payload, authenticatedSenderId: packet.senderId);
       }
     } on Object {
       // Invalid packets are deliberately dropped before Inbox/queue access.
@@ -251,31 +316,51 @@ class ActentTransportService implements MessageConnection {
   /// payloads or its authorization rules.
   Future<void> receivePacket(MessagingPacket packet) => _receive(packet);
 
-  Future<Map<String, Object?>> _preparePayload(
+  Future<_PreparedAttachmentPayload> _prepareStreamingPayload(
     Map<String, Object?> payload,
   ) async {
-    if (payload['type'] != 'workRequest') return payload;
     final copy = Map<String, Object?>.from(
       jsonDecode(jsonEncode(payload)) as Map,
     );
     final rawRequest = copy['request'];
-    if (rawRequest is! Map) return copy;
+    if (rawRequest is! Map) {
+      return _PreparedAttachmentPayload(control: copy);
+    }
     final request = Map<String, Object?>.from(rawRequest);
+    final requestId = request['requestId'];
     final rawMessage = request['message'];
-    if (rawMessage is! Map) return copy;
+    if (requestId is! String || rawMessage is! Map) {
+      return _PreparedAttachmentPayload(control: copy);
+    }
     final message = Map<String, Object?>.from(rawMessage);
-    final rawAttachments = message['attachments'];
-    if (rawAttachments is! List || rawAttachments.isEmpty) return copy;
+    final rawPayload = message['payload'];
+    if (rawPayload is! Map) {
+      return _PreparedAttachmentPayload(control: copy, requestId: requestId);
+    }
+    final messagePayload = Map<String, Object?>.from(rawPayload);
+    final rawAttachments = messagePayload['attachments'];
+    if (rawAttachments is! List || rawAttachments.isEmpty) {
+      return _PreparedAttachmentPayload(control: copy, requestId: requestId);
+    }
+    final messageId = message['id'];
+    if (messageId is! String || messageId.isEmpty) {
+      throw const FormatException('attachment message identity is missing');
+    }
     final chunker = const AttachmentChunker();
-    final transfers = <Map<String, Object?>>[];
-    var totalBytes = 0;
+    final transfers = <_PreparedAttachmentTransfer>[];
+    final descriptors = <Map<String, Object?>>[];
     final rewritten = <Map<String, Object?>>[];
+    var totalBytes = 0;
     for (final rawAttachment in rawAttachments) {
       if (rawAttachment is! Map) {
         throw const FormatException('attachment must be an object');
       }
       final attachment = Map<String, Object?>.from(rawAttachment);
+      final attachmentId = attachment['id'];
       final handle = attachment['handle'];
+      if (attachmentId is! String || attachmentId.isEmpty) {
+        throw const FormatException('attachment identity is missing');
+      }
       if (handle is! String || handle.isEmpty) {
         throw const FormatException('attachment handle is missing');
       }
@@ -284,152 +369,253 @@ class ActentTransportService implements MessageConnection {
           'attachment handle is outside Actent storage',
         );
       }
-      final bytes = await _readAttachment(handle);
-      totalBytes += bytes.length;
-      final configuredLimit = maxMessageBytes;
-      if (configuredLimit != null && totalBytes > configuredLimit) {
+      final source = await _attachmentSource(handle);
+      totalBytes += source.byteLength;
+      if (maxMessageBytes != null && totalBytes > maxMessageBytes!) {
         throw StateError(
           'message attachments exceed the configured transport limit',
         );
       }
-      final attachmentId = attachment['id'];
-      final messageId = message['id'];
-      if (attachmentId is! String || messageId is! String) {
-        throw const FormatException('attachment identity is missing');
-      }
-      final manifest = chunker.manifest(
+      final manifest = await manifestForSource(
         messageId: messageId,
         attachmentId: attachmentId,
+        source: source,
+        chunkSize: chunker.chunkSize,
         name: '${attachment['name']}',
         mimeType: '${attachment['mimeType']}',
-        plaintext: Uint8List.fromList(bytes),
       );
-      // The outer Packet is encrypted as well, but each attachment chunk is
-      // independently authenticated so a partial transfer cannot be
-      // mistaken for an opaque, trusted byte stream. The transfer key is
-      // carried inside the already authenticated Packet payload.
-      final transferKeyBytes = List<int>.generate(
+      final keyBytes = List<int>.generate(
         32,
         (_) => Random.secure().nextInt(256),
       );
-      final chunks = await chunker.encryptAndSplit(
-        manifest: manifest,
-        plaintext: Uint8List.fromList(bytes),
-        key: SecretKey(transferKeyBytes),
+      final key = SecretKey(keyBytes);
+      transfers.add(
+        _PreparedAttachmentTransfer(
+          attachmentId: attachmentId,
+          source: source,
+          manifest: manifest,
+          key: key,
+        ),
       );
-      transfers.add({
+      descriptors.add({
         'manifest': manifest.toJson(),
-        'chunks': chunks.map((chunk) => chunk.toJson()).toList(),
-        'key': base64UrlEncode(transferKeyBytes),
+        'key': base64UrlEncode(keyBytes),
       });
       attachment['handle'] = 'actent-transfer://$messageId/$attachmentId';
       rewritten.add(attachment);
     }
-    message['attachments'] = rewritten;
+    messagePayload['attachments'] = rewritten;
+    message['payload'] = messagePayload;
     request['message'] = message;
     copy['request'] = request;
-    copy['attachmentTransfers'] = transfers;
-    return copy;
+    copy['attachmentTransfers'] = descriptors;
+    return _PreparedAttachmentPayload(
+      control: copy,
+      requestId: requestId,
+      transfers: transfers,
+    );
   }
 
-  Future<Map<String, Object?>> _materializeAttachments(
+  Future<AttachmentSource> _attachmentSource(String handle) async {
+    if (_isOwnedAttachment(handle)) {
+      return ActentFileAttachmentSource(File(handle));
+    }
+    final bytes = await _readAttachment(handle);
+    return MemoryAttachmentSource(bytes);
+  }
+
+  Future<void> _beginIncomingAttachmentTransfer(
     Map<String, Object?> payload,
+    String senderId,
   ) async {
+    final requestId = _requestIdFromPayload(payload);
     final rawTransfers = payload['attachmentTransfers'];
-    if (rawTransfers == null) return payload;
-    if (rawTransfers is! List ||
-        (attachmentRoot == null && writeAttachment == null)) {
-      throw const FormatException('attachment transfer is unavailable');
-    }
     final request = payload['request'];
-    if (request is! Map || request['message'] is! Map) {
-      throw const FormatException('attachment transfer has no message');
+    if (rawTransfers is! List || request is! Map) {
+      throw const FormatException('attachment offer is invalid');
     }
-    final message = Map<String, Object?>.from(request['message'] as Map);
-    final attachments = message['attachments'];
-    if (attachments is! List) {
-      throw const FormatException('attachment list is invalid');
+    final rawMessage = request['message'];
+    final rawPayload = rawMessage is Map ? rawMessage['payload'] : null;
+    final rawAttachments = rawPayload is Map ? rawPayload['attachments'] : null;
+    if (rawAttachments is! List ||
+        rawAttachments.length != rawTransfers.length) {
+      throw const FormatException(
+        'attachment offer does not match the request',
+      );
     }
-    final byId = <String, Map<String, Object?>>{
-      for (final item in attachments)
-        if (item is Map && item['id'] is String)
-          item['id'] as String: Map<String, Object?>.from(item),
-    };
-    final createdFiles = <File>[];
-    try {
-      for (final rawTransfer in rawTransfers) {
-        if (rawTransfer is! Map) {
-          throw const FormatException('attachment transfer must be an object');
-        }
-        final transfer = Map<String, Object?>.from(rawTransfer);
-        final manifest = AttachmentManifest.fromJson(transfer['manifest']);
-        final attachment = byId[manifest.attachmentId];
-        if (attachment == null ||
-            attachment['name'] != manifest.name ||
-            attachment['mimeType'] != manifest.mimeType ||
-            attachment['byteLength'] != manifest.byteLength) {
-          throw const FormatException(
-            'attachment manifest does not match message',
-          );
-        }
-        final chunks = transfer['chunks'];
-        if (chunks is! List) {
-          throw const FormatException('attachment chunks must be an array');
-        }
-        final keyValue = transfer['key'];
-        if (keyValue is! String) {
-          throw const FormatException('attachment transfer key is missing');
-        }
-        final transferKey = _decodeTransferKey(keyValue);
-        final reassembler = AttachmentReassembler(manifest);
-        for (final rawChunk in chunks) {
-          reassembler.add(AttachmentChunk.fromJson(rawChunk));
-        }
-        final bytes = await reassembler.decryptAndAssemble(key: transferKey);
-        final messageId = message['id'];
-        if (messageId is! String ||
-            !_safePathComponent(messageId) ||
-            !_safePathComponent(manifest.attachmentId)) {
-          throw const FormatException('unsafe attachment path');
-        }
-        final targetRoot = attachmentRoot;
-        if (targetRoot != null) {
-          final directory = Directory(
-            '${targetRoot.path}${Platform.pathSeparator}$messageId${Platform.pathSeparator}${manifest.attachmentId}',
-          );
-          await directory.create(recursive: true);
-          final file = File(
-            '${directory.path}${Platform.pathSeparator}payload',
-          );
-          await file.writeAsBytes(bytes, flush: true);
-          createdFiles.add(file);
-          attachment['handle'] = file.path;
-        } else {
-          final handle = await writeAttachment!(
-            messageId,
-            manifest.attachmentId,
-            bytes,
-          );
-          attachment['handle'] = handle;
-        }
+    final expected = <String, Map<String, Object?>>{};
+    for (final rawAttachment in rawAttachments) {
+      if (rawAttachment is! Map || rawAttachment['id'] is! String) {
+        throw const FormatException('request attachment is invalid');
       }
-      final copy = Map<String, Object?>.from(payload);
-      final copyRequest = Map<String, Object?>.from(request);
-      message['attachments'] = byId.values.toList(growable: false);
-      copyRequest['message'] = message;
-      copy['request'] = copyRequest;
-      copy.remove('attachmentTransfers');
-      return copy;
-    } on Object {
-      for (final file in createdFiles) {
-        try {
-          await file.delete();
-        } on Object {
-          // Best-effort cleanup after a failed authenticated transfer.
+      final attachment = Map<String, Object?>.from(rawAttachment);
+      final attachmentId = attachment['id'] as String;
+      if (expected.containsKey(attachmentId)) {
+        throw const FormatException('request attachment IDs are duplicated');
+      }
+      expected[attachmentId] = attachment;
+    }
+    final receivers = <String, ResumableAttachmentReceiver>{};
+    final sinks = <String, ActentAttachmentSinkHandle>{};
+    for (final rawTransfer in rawTransfers) {
+      if (rawTransfer is! Map) {
+        throw const FormatException('attachment offer entry is invalid');
+      }
+      final transfer = Map<String, Object?>.from(rawTransfer);
+      final manifest = AttachmentManifest.fromJson(transfer['manifest']);
+      final attachment = expected[manifest.attachmentId];
+      if (attachment == null ||
+          attachment['byteLength'] != manifest.byteLength ||
+          attachment['name'] != manifest.name ||
+          attachment['mimeType'] != manifest.mimeType) {
+        throw const FormatException(
+          'attachment manifest does not match request',
+        );
+      }
+      if (receivers.containsKey(manifest.attachmentId)) {
+        throw const FormatException('attachment IDs are duplicated');
+      }
+      final keyValue = transfer['key'];
+      if (keyValue is! String) {
+        throw const FormatException('attachment transfer key is missing');
+      }
+      final AttachmentSink? sink = attachmentRoot != null
+          ? ActentFileAttachmentSink(attachmentRoot!)
+          : writeAttachment == null
+          ? null
+          : ActentCallbackAttachmentSink(writeAttachment!);
+      if (sink == null) {
+        throw const FormatException('attachment storage is unavailable');
+      }
+      final handleSink = sink as ActentAttachmentSinkHandle;
+      final receiver = ResumableAttachmentReceiver(
+        manifest: manifest,
+        sink: sink,
+        key: _decodeTransferKey(keyValue),
+      );
+      await receiver.begin();
+      receivers[manifest.attachmentId] = receiver;
+      sinks[manifest.attachmentId] = handleSink;
+    }
+    _incomingTransfers[requestId] = _IncomingAttachmentTransfer(
+      payload: payload,
+      receivers: receivers,
+      sinks: sinks,
+      senderId: senderId,
+    );
+    await _sendTransportPayload(senderId, {
+      'type': 'attachmentResume',
+      'schemaVersion': actentSchemaVersion,
+      'requestId': requestId,
+      'transfers': [
+        for (final entry in receivers.entries)
+          <String, Object?>{
+            'attachmentId': entry.key,
+            'received': (await entry.value.receivedChunkIndexes()).toList()
+              ..sort(),
+          },
+      ],
+    });
+  }
+
+  Future<void> _receiveAttachmentChunk(Map<String, Object?> payload) async {
+    final requestId = _requiredPayloadString(payload, 'requestId');
+    final attachmentId = _requiredPayloadString(payload, 'attachmentId');
+    final pending = _incomingTransfers[requestId];
+    final receiver = pending?.receivers[attachmentId];
+    if (receiver == null) {
+      throw const FormatException('unknown attachment transfer');
+    }
+    await receiver.add(AttachmentChunk.fromJson(payload['chunk']));
+  }
+
+  Future<void> _commitIncomingAttachmentTransfer(
+    Map<String, Object?> payload,
+    ActentRouter router,
+  ) async {
+    final requestId = _requiredPayloadString(payload, 'requestId');
+    final pending = _incomingTransfers[requestId];
+    if (pending == null) {
+      throw const FormatException('unknown attachment transfer');
+    }
+    try {
+      for (final receiver in pending.receivers.values) {
+        await receiver.commit();
+      }
+      final originalRequest = Map<String, Object?>.from(
+        (pending.payload['request'] as Map),
+      );
+      final originalMessage = Map<String, Object?>.from(
+        originalRequest['message'] as Map,
+      );
+      final originalPayload = Map<String, Object?>.from(
+        originalMessage['payload'] as Map,
+      );
+      final attachments = <Map<String, Object?>>[];
+      for (final rawAttachment in originalPayload['attachments'] as List) {
+        final attachment = Map<String, Object?>.from(rawAttachment);
+        final id = attachment['id'];
+        final sink = pending.sinks[id];
+        if (id is! String || sink == null || sink.completedHandle == null) {
+          throw const FormatException('attachment commit handle is missing');
         }
+        attachment['handle'] = sink.completedHandle;
+        attachments.add(attachment);
+      }
+      originalPayload['attachments'] = attachments;
+      originalMessage['payload'] = originalPayload;
+      originalRequest['message'] = originalMessage;
+      final materialized = Map<String, Object?>.from(pending.payload)
+        ..['request'] = originalRequest
+        ..remove('attachmentTransfers');
+      _incomingTransfers.remove(requestId);
+      await router.receive(
+        materialized,
+        authenticatedSenderId: pending.senderId,
+      );
+    } on Object {
+      for (final receiver in pending.receivers.values) {
+        await receiver.abort();
       }
       rethrow;
     }
+  }
+
+  void _receiveAttachmentResume(Map<String, Object?> payload) {
+    final requestId = _requiredPayloadString(payload, 'requestId');
+    final waiter = _resumeWaiters[requestId];
+    if (waiter == null || waiter.isCompleted) return;
+    final rawTransfers = payload['transfers'];
+    if (rawTransfers is! List) return;
+    final received = <String, Set<int>>{};
+    for (final rawTransfer in rawTransfers) {
+      if (rawTransfer is! Map || rawTransfer['attachmentId'] is! String) {
+        continue;
+      }
+      final values = rawTransfer['received'];
+      if (values is List) {
+        received[rawTransfer['attachmentId'] as String] = values
+            .whereType<int>()
+            .toSet();
+      }
+    }
+    waiter.complete(received);
+  }
+
+  String _requestIdFromPayload(Map<String, Object?> payload) {
+    final request = payload['request'];
+    if (request is! Map || request['requestId'] is! String) {
+      throw const FormatException('attachment request ID is missing');
+    }
+    return request['requestId'] as String;
+  }
+
+  String _requiredPayloadString(Map<String, Object?> payload, String key) {
+    final value = payload[key];
+    if (value is! String || value.isEmpty) {
+      throw FormatException('$key must be a non-empty string');
+    }
+    return value;
   }
 
   bool _isOwnedAttachment(String value) {
@@ -586,6 +772,46 @@ SimplePublicKey _decodePublicKey(String value) {
   }
 }
 
+class _PreparedAttachmentPayload {
+  _PreparedAttachmentPayload({
+    required this.control,
+    this.requestId = '',
+    this.transfers = const [],
+  });
+
+  final Map<String, Object?> control;
+  final String requestId;
+  final List<_PreparedAttachmentTransfer> transfers;
+}
+
+class _PreparedAttachmentTransfer {
+  const _PreparedAttachmentTransfer({
+    required this.attachmentId,
+    required this.source,
+    required this.manifest,
+    required this.key,
+  });
+
+  final String attachmentId;
+  final AttachmentSource source;
+  final AttachmentManifest manifest;
+  final SecretKey key;
+}
+
+class _IncomingAttachmentTransfer {
+  const _IncomingAttachmentTransfer({
+    required this.payload,
+    required this.receivers,
+    required this.sinks,
+    required this.senderId,
+  });
+
+  final Map<String, Object?> payload;
+  final Map<String, ResumableAttachmentReceiver> receivers;
+  final Map<String, ActentAttachmentSinkHandle> sinks;
+  final String senderId;
+}
+
 class _UnavailablePacketConnection implements PacketConnection {
   const _UnavailablePacketConnection();
 
@@ -596,13 +822,6 @@ class _UnavailablePacketConnection implements PacketConnection {
 
 String _newTopic() =>
     'actent-${base64UrlEncode(List<int>.generate(32, (_) => Random.secure().nextInt(256))).replaceAll('=', '')}';
-
-bool _safePathComponent(String value) =>
-    value.isNotEmpty &&
-    value != '.' &&
-    value != '..' &&
-    !value.contains('/') &&
-    !value.contains('\\');
 
 Future<String?> _firstLanIpv4() async {
   final interfaces = await NetworkInterface.list(

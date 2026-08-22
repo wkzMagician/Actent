@@ -52,16 +52,14 @@ void main() {
     );
 
     expect(publisher.topic, 'remote-topic');
-    final packet = MessagingPacket.decode(publisher.body!);
-    final plaintext = await PacketCrypto().decrypt(
-      recipient: remote,
-      senderPublicKey: local.publicKey,
-      packet: packet,
+    expect(
+      (await _decodePublishedPayloads(
+        publisher,
+        remote: remote,
+        senderPublicKey: local.publicKey,
+      )).single,
+      {'type': 'workRequest', 'schemaVersion': actentSchemaVersion},
     );
-    expect(jsonDecode(utf8.decode(plaintext)), {
-      'type': 'workRequest',
-      'schemaVersion': actentSchemaVersion,
-    });
   });
 
   test(
@@ -188,37 +186,38 @@ void main() {
           'request': request.toJson(),
         },
       );
-      final packet = MessagingPacket.decode(publisher.body!);
-      final plaintext = await PacketCrypto().decrypt(
-        recipient: remote,
+      final decoded = await _decodePublishedPayloads(
+        publisher,
+        remote: remote,
         senderPublicKey: local.publicKey,
-        packet: packet,
       );
-      final decoded = Map<String, Object?>.from(
-        jsonDecode(utf8.decode(plaintext)) as Map,
+      final offer = decoded.firstWhere(
+        (payload) => payload['type'] == 'workRequest',
       );
-      final transfers = decoded['attachmentTransfers'] as List;
+      final transfers = offer['attachmentTransfers'] as List;
       final transfer = Map<String, Object?>.from(transfers.single as Map);
       final manifest = AttachmentManifest.fromJson(transfer['manifest']);
       final transferKey = SecretKey(
         base64Url.decode(transfer['key'] as String),
       );
       final reassembler = AttachmentReassembler(manifest);
-      for (final chunk in transfer['chunks'] as List) {
-        reassembler.add(AttachmentChunk.fromJson(chunk));
+      for (final payload in decoded) {
+        if (payload['type'] != 'attachmentChunk') continue;
+        reassembler.add(AttachmentChunk.fromJson(payload['chunk']));
       }
       expect(
         utf8.decode(await reassembler.decryptAndAssemble(key: transferKey)),
         'private attachment',
       );
-      final decodedRequest = Map<String, Object?>.from(
-        decoded['request'] as Map,
-      );
+      final decodedRequest = Map<String, Object?>.from(offer['request'] as Map);
       final decodedMessage = Map<String, Object?>.from(
         decodedRequest['message'] as Map,
       );
+      final decodedPayload = Map<String, Object?>.from(
+        decodedMessage['payload'] as Map,
+      );
       final decodedAttachment = Map<String, Object?>.from(
-        (decodedMessage['attachments'] as List).single as Map,
+        (decodedPayload['attachments'] as List).single as Map,
       );
       expect(decodedAttachment['handle'], startsWith('actent-transfer://'));
     },
@@ -227,7 +226,9 @@ void main() {
 
 class _CapturePublisher implements RelayPublisher {
   String? topic;
-  String? body;
+  final List<String> bodies = [];
+
+  String? get body => bodies.isEmpty ? null : bodies.last;
 
   @override
   Future<void> publish(
@@ -236,6 +237,25 @@ class _CapturePublisher implements RelayPublisher {
     String? authorization,
   }) async {
     this.topic = topic;
-    this.body = body;
+    bodies.add(body);
   }
+}
+
+Future<List<Map<String, Object?>>> _decodePublishedPayloads(
+  _CapturePublisher publisher, {
+  required PacketIdentity remote,
+  required SimplePublicKey senderPublicKey,
+}) async {
+  final values = <Map<String, Object?>>[];
+  for (final body in publisher.bodies) {
+    final plaintext = await PacketCrypto().decrypt(
+      recipient: remote,
+      senderPublicKey: senderPublicKey,
+      packet: MessagingPacket.decode(body),
+    );
+    values.add(
+      Map<String, Object?>.from(jsonDecode(utf8.decode(plaintext)) as Map),
+    );
+  }
+  return values;
 }

@@ -6,3 +6,15 @@ export 'package:dartloom_messaging/attachment_chunks.dart'
         AttachmentChunker,
         AttachmentManifest,
         AttachmentReassembler;
+export 'package:dartloom_messaging/attachment_stream.dart'
+    show
+        AttachmentChunkSender,
+        AttachmentMissingChunks,
+        manifestForSource,
+        AttachmentSink,
+        AttachmentSource,
+        AttachmentTransferReport,
+        MemoryAttachmentSink,
+        MemoryAttachmentSource,
+        ResumableAttachmentReceiver,
+        ResumableAttachmentSender;

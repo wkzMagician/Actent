@@ -21,20 +21,28 @@ class CancellationToken {
 }
 
 class WorkRunResult {
-  const WorkRunResult.success({this.summary})
+  const WorkRunResult.success({this.summary, this.output})
     : status = WorkReceiptStatus.succeeded,
-      errorCode = null;
+      errorCode = null,
+      error = null;
 
-  const WorkRunResult.stored({this.summary})
+  const WorkRunResult.stored({this.summary, this.output})
     : status = WorkReceiptStatus.stored,
-      errorCode = null;
+      errorCode = null,
+      error = null;
 
-  const WorkRunResult.failure({required this.errorCode, this.summary})
-    : status = WorkReceiptStatus.failed;
+  const WorkRunResult.failure({
+    required this.errorCode,
+    this.summary,
+    this.output,
+    this.error,
+  }) : status = WorkReceiptStatus.failed;
 
   final WorkReceiptStatus status;
   final String? errorCode;
   final String? summary;
+  final WorkError? error;
+  final ActentPayload? output;
 }
 
 class NullWorkRunner implements WorkRunner {
@@ -119,6 +127,7 @@ class WorkQueueCoordinator {
   final Map<String, _WorkQueue> _queues = {};
   final Map<String, CancellationToken> _running = {};
   final Map<String, String> _runningWorkIds = {};
+  final Map<String, int> _receiptSequences = {};
   int _runningCount = 0;
   bool _draining = false;
 
@@ -371,14 +380,33 @@ class WorkQueueCoordinator {
           requestId: item.request.requestId,
           cancellation: token,
         );
+        var executionResult = result;
+        if (!token.isCancelled &&
+            result.status == WorkReceiptStatus.succeeded) {
+          final output = result.output;
+          if ((item.work.outputType == ActentContentType.none &&
+                  output != null) ||
+              (output != null && output.type != item.work.outputType) ||
+              (item.work.outputType != ActentContentType.none &&
+                  output == null)) {
+            executionResult = const WorkRunResult.failure(
+              errorCode: 'output_contract_violated',
+              summary: 'Work output does not match its declared output type.',
+            );
+          }
+        }
         final status = token.isCancelled
             ? WorkReceiptStatus.cancelled
-            : result.status;
+            : executionResult.status;
         receipt = _receipt(
           item.request,
           status,
-          errorCode: token.isCancelled ? 'cancelled' : result.errorCode,
-          summary: result.summary,
+          errorCode: token.isCancelled
+              ? 'cancelled'
+              : executionResult.errorCode,
+          error: executionResult.error,
+          summary: executionResult.summary,
+          output: executionResult.output,
         );
       }
     } catch (error) {
@@ -402,16 +430,25 @@ class WorkQueueCoordinator {
     WorkRequest request,
     WorkReceiptStatus status, {
     String? errorCode,
+    WorkError? error,
     String? summary,
-  }) => WorkReceipt(
-    requestId: request.requestId,
-    workId: request.workId,
-    status: status,
-    createdAt: DateTime.now().toUtc(),
-    completedAt: DateTime.now().toUtc(),
-    errorCode: errorCode,
-    summary: summary,
-  );
+    ActentPayload? output,
+  }) {
+    final sequence = (_receiptSequences[request.requestId] ?? 0) + 1;
+    _receiptSequences[request.requestId] = sequence;
+    return WorkReceipt(
+      requestId: request.requestId,
+      workId: request.workId,
+      status: status,
+      sequence: sequence,
+      createdAt: DateTime.now().toUtc(),
+      completedAt: DateTime.now().toUtc(),
+      errorCode: errorCode,
+      error: error ?? (errorCode == null ? null : WorkError(code: errorCode)),
+      summary: summary,
+      output: output,
+    );
+  }
 
   Future<void> _complete(WorkReceipt receipt) async {
     await repository.saveReceipt(receipt);

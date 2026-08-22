@@ -1,8 +1,8 @@
 import 'dart:collection';
 
-const actentSchemaVersion = 1;
+const actentSchemaVersion = 2;
 
-enum ActentContentType { text, url, image, file, json }
+enum ActentContentType { none, text, url, image, file, json }
 
 ActentContentType classifyAttachmentContentTypes(Iterable<String> mimeTypes) {
   final normalized = mimeTypes
@@ -183,26 +183,89 @@ class ActentAttachment {
   }
 }
 
+/// The reusable value passed between Works. ActentMessage adds provenance and
+/// activity metadata around this payload.
+class ActentPayload {
+  ActentPayload({
+    required this.type,
+    Map<String, Object?> data = const {},
+    List<ActentAttachment> attachments = const [],
+  }) : data = UnmodifiableMapView(Map<String, Object?>.from(data)),
+       attachments = List.unmodifiable(attachments);
+
+  final ActentContentType type;
+  final Map<String, Object?> data;
+  final List<ActentAttachment> attachments;
+
+  ActentContent get content => ActentContent(type: type, data: data);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'type': type.value,
+    'data': data,
+    'attachments': attachments.map((item) => item.toJson()).toList(),
+  };
+
+  factory ActentPayload.fromJson(Object? value) {
+    final json = _map(value, 'payload');
+    final rawAttachments = json['attachments'];
+    if (rawAttachments is! List) {
+      throw const ActentValidationException(
+        'payload.attachments',
+        'must be an array',
+      );
+    }
+    return ActentPayload(
+      type: ActentContentTypeJson.parse(json['type'], 'payload.type'),
+      data: _map(json['data'], 'payload.data'),
+      attachments: [
+        for (var index = 0; index < rawAttachments.length; index++)
+          ActentAttachment.fromJson(rawAttachments[index], index),
+      ],
+    );
+  }
+
+  factory ActentPayload.fromLegacy({
+    required ActentContent content,
+    required List<ActentAttachment> attachments,
+  }) => ActentPayload(
+    type: content.type,
+    data: content.data,
+    attachments: attachments,
+  );
+}
+
 class ActentMessage {
   ActentMessage({
     required this.id,
     required this.traceId,
     required this.createdAt,
     required this.source,
-    required this.content,
-    this.attachments = const [],
+    ActentContent? content,
+    List<ActentAttachment> attachments = const [],
+    ActentPayload? payload,
     Map<String, Object?> metadata = const {},
     this.schemaVersion = actentSchemaVersion,
-  }) : metadata = UnmodifiableMapView(Map<String, Object?>.from(metadata));
+  }) : payload =
+           payload ??
+           (content == null
+               ? (throw ArgumentError('content or payload is required'))
+               : ActentPayload.fromLegacy(
+                   content: content,
+                   attachments: attachments,
+                 )),
+       metadata = UnmodifiableMapView(Map<String, Object?>.from(metadata));
 
   final String id;
   final String traceId;
   final int schemaVersion;
   final DateTime createdAt;
   final ActentSource source;
-  final ActentContent content;
-  final List<ActentAttachment> attachments;
+  final ActentPayload payload;
   final Map<String, Object?> metadata;
+
+  ActentContent get content => payload.content;
+
+  List<ActentAttachment> get attachments => payload.attachments;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'id': id,
@@ -210,8 +273,7 @@ class ActentMessage {
     'schemaVersion': schemaVersion,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'source': source.toJson(),
-    'content': content.toJson(),
-    'attachments': attachments.map((item) => item.toJson()).toList(),
+    'payload': payload.toJson(),
     'metadata': metadata,
   };
 
@@ -223,33 +285,32 @@ class ActentMessage {
       'schemaVersion',
       'createdAt',
       'source',
+      'payload',
       'content',
       'attachments',
       'metadata',
     }, 'message');
     final schemaVersion = _integer(json, 'schemaVersion', 'schemaVersion');
-    if (schemaVersion != actentSchemaVersion) {
+    if (schemaVersion != 1 && schemaVersion != actentSchemaVersion) {
       throw ActentValidationException(
         'schemaVersion',
         'unsupported version $schemaVersion; expected $actentSchemaVersion',
       );
     }
-    final attachmentsValue = json['attachments'];
-    if (attachmentsValue is! List) {
-      throw const ActentValidationException('attachments', 'must be an array');
-    }
     final metadata = _map(json['metadata'], 'metadata');
+    final payload = json['payload'] == null
+        ? ActentPayload.fromLegacy(
+            content: ActentContent.fromJson(json['content']),
+            attachments: _legacyAttachments(json['attachments']),
+          )
+        : ActentPayload.fromJson(json['payload']);
     return ActentMessage(
       id: _string(json, 'id', 'id'),
       traceId: _string(json, 'traceId', 'traceId'),
-      schemaVersion: schemaVersion,
+      schemaVersion: actentSchemaVersion,
       createdAt: _date(json, 'createdAt', 'createdAt'),
       source: ActentSource.fromJson(json['source']),
-      content: ActentContent.fromJson(json['content']),
-      attachments: [
-        for (var index = 0; index < attachmentsValue.length; index++)
-          ActentAttachment.fromJson(attachmentsValue[index], index),
-      ],
+      payload: payload,
       metadata: metadata,
     );
   }
@@ -308,6 +369,7 @@ class Work {
     required this.ownerDeviceId,
     this.allowedSourceDeviceIds = const {},
     this.acceptedContentTypes = const {},
+    this.outputType = ActentContentType.none,
     this.timeout = const Duration(hours: 24),
     this.queueLimit = 10,
     this.enabled = true,
@@ -326,6 +388,7 @@ class Work {
   final String ownerDeviceId;
   final Set<String> allowedSourceDeviceIds;
   final Set<ActentContentType> acceptedContentTypes;
+  final ActentContentType outputType;
   final Duration timeout;
   final int queueLimit;
   final bool enabled;
@@ -343,6 +406,7 @@ class Work {
     name: name,
     ownerDeviceId: ownerDeviceId,
     acceptedContentTypes: ActentContentType.values.toSet(),
+    outputType: ActentContentType.none,
     platformBindings: const {'kind': 'null'},
   );
 
@@ -362,6 +426,7 @@ class Work {
     'allowedSourceDeviceIds': allowedSourceDeviceIds.toList()..sort(),
     'acceptedContentTypes':
         acceptedContentTypes.map((item) => item.value).toList()..sort(),
+    'outputType': outputType.value,
     'timeoutSeconds': timeout.inSeconds,
     'queueLimit': queueLimit,
     'enabled': enabled,
@@ -382,6 +447,7 @@ class Work {
     'acceptedContentTypes': acceptedContentTypes
         .map((value) => value.value)
         .toList(),
+    'outputType': outputType.value,
     'timeoutSeconds': timeout.inSeconds,
     'queueLimit': queueLimit,
     'enabled': enabled,
@@ -410,6 +476,10 @@ class Work {
         'timeout and queueLimit must be positive',
       );
     }
+    final rawBinding = json['platformBindings'];
+    final outputType = json['outputType'] == null
+        ? _legacyOutputType(rawBinding)
+        : ActentContentTypeJson.parse(json['outputType'], 'outputType');
     return Work(
       id: _string(json, 'id', 'id'),
       revision: _integer(json, 'revision', 'revision'),
@@ -423,6 +493,7 @@ class Work {
             'acceptedContentTypes[$index]',
           ),
       },
+      outputType: outputType,
       timeout: Duration(seconds: timeoutSeconds),
       queueLimit: queueLimit,
       enabled: _boolean(json, 'enabled', 'enabled'),
@@ -430,6 +501,203 @@ class Work {
           ? const {}
           : _map(json['platformBindings'], 'platformBindings'),
       catalogVisibility: _map(json['catalogVisibility'], 'catalogVisibility'),
+    );
+  }
+}
+
+class WorkflowStep {
+  const WorkflowStep({
+    required this.id,
+    required this.workId,
+    required this.workRevision,
+    required this.deviceId,
+  });
+
+  final String id;
+  final String workId;
+  final int workRevision;
+  final String deviceId;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'workId': workId,
+    'workRevision': workRevision,
+    'deviceId': deviceId,
+  };
+
+  factory WorkflowStep.fromJson(Object? value) {
+    final json = _map(value, 'workflow.step');
+    return WorkflowStep(
+      id: _string(json, 'id', 'workflow.step.id'),
+      workId: _string(json, 'workId', 'workflow.step.workId'),
+      workRevision: _integer(
+        json,
+        'workRevision',
+        'workflow.step.workRevision',
+      ),
+      deviceId: _string(json, 'deviceId', 'workflow.step.deviceId'),
+    );
+  }
+}
+
+class Workflow {
+  Workflow({
+    required this.id,
+    required this.revision,
+    required this.name,
+    required this.ownerDeviceId,
+    required this.steps,
+    this.acceptedContentTypes = const {},
+    this.enabled = true,
+  });
+
+  final String id;
+  final int revision;
+  final String name;
+  final String ownerDeviceId;
+  final List<WorkflowStep> steps;
+  final Set<ActentContentType> acceptedContentTypes;
+  final bool enabled;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'revision': revision,
+    'name': name,
+    'ownerDeviceId': ownerDeviceId,
+    'acceptedContentTypes': acceptedContentTypes
+        .map((item) => item.value)
+        .toList(),
+    'enabled': enabled,
+    'steps': steps.map((step) => step.toJson()).toList(),
+  };
+
+  factory Workflow.fromJson(Object? value) {
+    final json = _map(value, 'workflow');
+    final rawTypes = json['acceptedContentTypes'];
+    final rawSteps = json['steps'];
+    if (rawTypes is! List || rawSteps is! List || rawSteps.isEmpty) {
+      throw const ActentValidationException(
+        'workflow',
+        'acceptedContentTypes and steps must be non-empty arrays',
+      );
+    }
+    return Workflow(
+      id: _string(json, 'id', 'workflow.id'),
+      revision: _integer(json, 'revision', 'workflow.revision'),
+      name: _string(json, 'name', 'workflow.name'),
+      ownerDeviceId: _string(json, 'ownerDeviceId', 'workflow.ownerDeviceId'),
+      acceptedContentTypes: {
+        for (var index = 0; index < rawTypes.length; index++)
+          ActentContentTypeJson.parse(
+            rawTypes[index],
+            'workflow.acceptedContentTypes[$index]',
+          ),
+      },
+      enabled: _boolean(json, 'enabled', 'workflow.enabled'),
+      steps: rawSteps.map(WorkflowStep.fromJson).toList(growable: false),
+    );
+  }
+}
+
+enum WorkflowExecutionStatus {
+  queued,
+  running,
+  succeeded,
+  failed,
+  cancelled,
+  invalid,
+}
+
+extension WorkflowExecutionStatusJson on WorkflowExecutionStatus {
+  String get value => name;
+
+  static WorkflowExecutionStatus parse(Object? value, String path) {
+    if (value is! String) {
+      throw ActentValidationException(path, 'must be a string');
+    }
+    return WorkflowExecutionStatus.values.firstWhere(
+      (item) => item.value == value,
+      orElse: () =>
+          throw ActentValidationException(path, 'unknown workflow status'),
+    );
+  }
+}
+
+/// Durable coordination state for one linear Workflow execution.
+///
+/// The output is retained for continuation, but it is deliberately optional
+/// in the activity view: a remote final executor may keep the actual payload
+/// while the owner receives only status and error metadata.
+class WorkflowExecution {
+  WorkflowExecution({
+    required this.id,
+    required this.workflowId,
+    required this.workflowRevision,
+    required this.sourceDeviceId,
+    required this.createdAt,
+    required this.status,
+    this.currentStepIndex = 0,
+    this.updatedAt,
+    this.error,
+    this.output,
+  });
+
+  final String id;
+  final String workflowId;
+  final int workflowRevision;
+  final String sourceDeviceId;
+  final DateTime createdAt;
+  final WorkflowExecutionStatus status;
+  final int currentStepIndex;
+  final DateTime? updatedAt;
+  final WorkError? error;
+  final ActentPayload? output;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'workflowId': workflowId,
+    'workflowRevision': workflowRevision,
+    'sourceDeviceId': sourceDeviceId,
+    'createdAt': createdAt.toUtc().toIso8601String(),
+    'status': status.value,
+    'currentStepIndex': currentStepIndex,
+    if (updatedAt != null) 'updatedAt': updatedAt!.toUtc().toIso8601String(),
+    if (error != null) 'error': error!.toJson(),
+    if (output != null) 'output': output!.toJson(),
+  };
+
+  factory WorkflowExecution.fromJson(Object? value) {
+    final json = _map(value, 'workflowExecution');
+    return WorkflowExecution(
+      id: _string(json, 'id', 'workflowExecution.id'),
+      workflowId: _string(json, 'workflowId', 'workflowExecution.workflowId'),
+      workflowRevision: _integer(
+        json,
+        'workflowRevision',
+        'workflowExecution.workflowRevision',
+      ),
+      sourceDeviceId: _string(
+        json,
+        'sourceDeviceId',
+        'workflowExecution.sourceDeviceId',
+      ),
+      createdAt: _date(json, 'createdAt', 'workflowExecution.createdAt'),
+      status: WorkflowExecutionStatusJson.parse(
+        json['status'],
+        'workflowExecution.status',
+      ),
+      currentStepIndex: _integer(
+        json,
+        'currentStepIndex',
+        'workflowExecution.currentStepIndex',
+      ),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : _date(json, 'updatedAt', 'workflowExecution.updatedAt'),
+      error: json['error'] == null ? null : WorkError.fromJson(json['error']),
+      output: json['output'] == null
+          ? null
+          : ActentPayload.fromJson(json['output']),
     );
   }
 }
@@ -444,6 +712,9 @@ class WorkRequest {
     required this.targetDeviceId,
     required this.createdAt,
     required this.expiresAt,
+    this.workflowExecutionId,
+    this.workflowStepId,
+    this.workflowOwnerDeviceId,
   });
 
   final String requestId;
@@ -454,6 +725,9 @@ class WorkRequest {
   final String targetDeviceId;
   final DateTime createdAt;
   final DateTime expiresAt;
+  final String? workflowExecutionId;
+  final String? workflowStepId;
+  final String? workflowOwnerDeviceId;
 
   bool get isExpired => !expiresAt.isAfter(DateTime.now().toUtc());
 
@@ -466,6 +740,10 @@ class WorkRequest {
     'targetDeviceId': targetDeviceId,
     'createdAt': createdAt.toUtc().toIso8601String(),
     'expiresAt': expiresAt.toUtc().toIso8601String(),
+    if (workflowExecutionId != null) 'workflowExecutionId': workflowExecutionId,
+    if (workflowStepId != null) 'workflowStepId': workflowStepId,
+    if (workflowOwnerDeviceId != null)
+      'workflowOwnerDeviceId': workflowOwnerDeviceId,
   };
 
   factory WorkRequest.fromJson(Object? value) {
@@ -479,6 +757,17 @@ class WorkRequest {
       targetDeviceId: _string(json, 'targetDeviceId', 'targetDeviceId'),
       createdAt: _date(json, 'createdAt', 'createdAt'),
       expiresAt: _date(json, 'expiresAt', 'expiresAt'),
+      workflowExecutionId: _optionalString(
+        json,
+        'workflowExecutionId',
+        'workflowExecutionId',
+      ),
+      workflowStepId: _optionalString(json, 'workflowStepId', 'workflowStepId'),
+      workflowOwnerDeviceId: _optionalString(
+        json,
+        'workflowOwnerDeviceId',
+        'workflowOwnerDeviceId',
+      ),
     );
   }
 }
@@ -489,28 +778,37 @@ class WorkReceipt {
     required this.workId,
     required this.status,
     required this.createdAt,
+    this.sequence = 1,
     this.completedAt,
     this.errorCode,
+    this.error,
     this.summary,
+    this.output,
   });
 
   final String requestId;
   final String workId;
   final WorkReceiptStatus status;
   final DateTime createdAt;
+  final int sequence;
   final DateTime? completedAt;
   final String? errorCode;
+  final WorkError? error;
   final String? summary;
+  final ActentPayload? output;
 
   Map<String, Object?> toJson() => <String, Object?>{
     'requestId': requestId,
     'workId': workId,
     'status': status.value,
+    'sequence': sequence,
     'createdAt': createdAt.toUtc().toIso8601String(),
     if (completedAt != null)
       'completedAt': completedAt!.toUtc().toIso8601String(),
     if (errorCode != null) 'errorCode': errorCode,
+    if (error != null) 'error': error!.toJson(),
     if (summary != null) 'summary': summary,
+    if (output != null) 'output': output!.toJson(),
   };
 
   factory WorkReceipt.fromJson(Object? value) {
@@ -520,13 +818,67 @@ class WorkReceipt {
       workId: _string(json, 'workId', 'workId'),
       status: WorkReceiptStatusJson.parse(json['status'], 'status'),
       createdAt: _date(json, 'createdAt', 'createdAt'),
+      sequence: json['sequence'] is int ? json['sequence'] as int : 1,
       completedAt: json.containsKey('completedAt')
           ? _date(json, 'completedAt', 'completedAt')
           : null,
       errorCode: _optionalString(json, 'errorCode', 'errorCode'),
+      error: json['error'] == null ? null : WorkError.fromJson(json['error']),
       summary: _optionalString(json, 'summary', 'summary'),
+      output: json['output'] == null
+          ? null
+          : ActentPayload.fromJson(json['output']),
     );
   }
+}
+
+class WorkError {
+  const WorkError({required this.code, this.message, this.details});
+
+  final String code;
+  final String? message;
+  final Map<String, Object?>? details;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'code': code,
+    if (message != null) 'message': message,
+    if (details != null) 'details': details,
+  };
+
+  factory WorkError.fromJson(Object? value) {
+    final json = _map(value, 'error');
+    return WorkError(
+      code: _string(json, 'code', 'error.code'),
+      message: _optionalString(json, 'message', 'error.message'),
+      details: json['details'] == null
+          ? null
+          : _map(json['details'], 'error.details'),
+    );
+  }
+}
+
+List<ActentAttachment> _legacyAttachments(Object? value) {
+  if (value is! List) {
+    throw const ActentValidationException('attachments', 'must be an array');
+  }
+  return [
+    for (var index = 0; index < value.length; index++)
+      ActentAttachment.fromJson(value[index], index),
+  ];
+}
+
+ActentContentType _legacyOutputType(Object? value) {
+  if (value is! Map) return ActentContentType.none;
+  final kind = value['kind'];
+  return switch (kind) {
+    'desktop-script' ||
+    'desktop-shell' ||
+    'desktop-file' ||
+    'web-js' ||
+    'http' ||
+    'android-http' => ActentContentType.text,
+    _ => ActentContentType.none,
+  };
 }
 
 Map<String, Object?> _map(Object? value, String path) {

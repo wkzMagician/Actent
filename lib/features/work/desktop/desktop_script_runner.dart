@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import '../../actent_core/actent_models.dart';
 import '../work_runner.dart';
+import '../work_output.dart';
 
 class DesktopScriptConfig {
   DesktopScriptConfig({
@@ -131,12 +132,14 @@ class DesktopScriptRunner implements WorkRunner {
     ScriptProcessLauncher? launcher,
     this.secrets,
     this.maxStderrBytes = 8 * 1024,
+    this.maxStdoutBytes = 1024 * 1024,
   }) : _launcher = launcher ?? const IoScriptProcessLauncher();
 
   final DesktopScriptConfig config;
   final ScriptProcessLauncher _launcher;
   final DesktopSecretResolver? secrets;
   final int maxStderrBytes;
+  final int maxStdoutBytes;
 
   @override
   String get id => 'desktop-script';
@@ -157,7 +160,15 @@ class DesktopScriptRunner implements WorkRunner {
     }
     final process = await _launcher.start(runtimeConfig);
     final stderr = BytesBuilder(copy: false);
-    final stdoutDone = process.stdout.drain<void>();
+    final stdout = BytesBuilder(copy: false);
+    final stdoutDone = process.stdout.listen((chunk) {
+      if (stdout.length < maxStdoutBytes) {
+        final remaining = maxStdoutBytes - stdout.length;
+        stdout.add(
+          chunk.length <= remaining ? chunk : chunk.sublist(0, remaining),
+        );
+      }
+    }).asFuture<void>();
     final stderrDone = process.stderr.listen((chunk) {
       if (stderr.length < maxStderrBytes) {
         final remaining = maxStderrBytes - stderr.length;
@@ -177,7 +188,22 @@ class DesktopScriptRunner implements WorkRunner {
       if (exitCode == -2) {
         return const WorkRunResult.failure(errorCode: 'timeout');
       }
-      if (exitCode == 0) return const WorkRunResult.success();
+      if (exitCode == 0) {
+        try {
+          return WorkRunResult.success(
+            output: parseTextWorkOutput(
+              work,
+              utf8.decode(stdout.takeBytes(), allowMalformed: true),
+              maxTextBytes: maxStdoutBytes,
+            ),
+          );
+        } on Object catch (error) {
+          return WorkRunResult.failure(
+            errorCode: 'output_contract_violated',
+            summary: error.toString(),
+          );
+        }
+      }
       final summary = utf8
           .decode(stderr.takeBytes(), allowMalformed: true)
           .trim();

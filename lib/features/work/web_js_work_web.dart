@@ -4,6 +4,7 @@ import 'dart:js_interop';
 
 import '../actent_core/actent_models.dart';
 import 'work_runner.dart';
+import 'work_output.dart';
 
 @JS('eval')
 external JSAny? _evaluate(JSString source);
@@ -73,11 +74,7 @@ class WebJsWorkRunner implements WorkRunner {
         return const WorkRunResult.failure(errorCode: 'cancelled');
       }
       final value = resolved?.dartify();
-      return WorkRunResult.success(
-        summary: value is String && value.length > 512
-            ? value.substring(0, 512)
-            : '$value',
-      );
+      return WorkRunResult.success(output: parseDynamicWorkOutput(work, value));
     } on Object catch (error) {
       return WorkRunResult.failure(
         errorCode: 'script_error',

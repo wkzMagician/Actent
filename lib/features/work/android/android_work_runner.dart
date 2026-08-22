@@ -2,6 +2,7 @@ import 'package:http/http.dart' as http;
 
 import '../../actent_core/actent_models.dart';
 import '../work_runner.dart';
+import '../work_output.dart';
 
 enum AndroidAttachmentPlacement { none, stream, streams }
 
@@ -234,10 +235,15 @@ class AndroidHttpSpec {
 }
 
 class HttpExecutionResult {
-  const HttpExecutionResult({required this.statusCode, this.safeSummary});
+  const HttpExecutionResult({
+    required this.statusCode,
+    this.safeSummary,
+    this.body,
+  });
 
   final int statusCode;
   final String? safeSummary;
+  final String? body;
 }
 
 abstract interface class AndroidHttpClient {
@@ -274,6 +280,7 @@ class IoAndroidHttpClient implements AndroidHttpClient {
       safeSummary: responseBody.length > 256
           ? responseBody.substring(0, 256)
           : responseBody,
+      body: responseBody,
     );
   }
 }
@@ -328,12 +335,23 @@ class AndroidHttpRunner implements WorkRunner {
         timeout: spec.timeout,
       );
       final succeeded = result.statusCode >= 200 && result.statusCode < 300;
-      return succeeded
-          ? WorkRunResult.success(summary: 'http_${result.statusCode}')
-          : WorkRunResult.failure(
-              errorCode: 'http_${result.statusCode}',
-              summary: result.safeSummary,
-            );
+      if (!succeeded) {
+        return WorkRunResult.failure(
+          errorCode: 'http_${result.statusCode}',
+          summary: result.safeSummary,
+        );
+      }
+      try {
+        return WorkRunResult.success(
+          summary: 'http_${result.statusCode}',
+          output: parseTextWorkOutput(work, result.body ?? ''),
+        );
+      } on Object catch (error) {
+        return WorkRunResult.failure(
+          errorCode: 'output_contract_violated',
+          summary: error.toString(),
+        );
+      }
     } catch (error) {
       return WorkRunResult.failure(
         errorCode: 'http_failed',

@@ -216,6 +216,10 @@ class ActentRouter {
           );
         }
       }
+      final existing = await repository.getReceipt(receipt.requestId);
+      if (existing != null && existing.sequence >= receipt.sequence) {
+        return existing;
+      }
       await repository.saveReceipt(receipt);
       return receipt;
     }

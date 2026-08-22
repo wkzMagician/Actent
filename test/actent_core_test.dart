@@ -114,8 +114,9 @@ void main() {
       );
 
       final unknownAttachment = message.toJson();
-      final attachments = (unknownAttachment['attachments'] as List)
-          .cast<Object?>();
+      final attachments =
+          ((unknownAttachment['payload'] as Map)['attachments'] as List)
+              .cast<Object?>();
       attachments[0] = Map<String, Object?>.from(attachments[0] as Map)
         ..['unexpected'] = true;
       expect(
@@ -446,6 +447,49 @@ void main() {
         (await repository.getReceipt('request-1'))!.status,
         WorkReceiptStatus.stored,
       );
+    });
+
+    test('routing ignores stale receipt sequences', () async {
+      final connection = FakeMessageConnection();
+      final router = ActentRouter(
+        deviceId: 'phone',
+        repository: repository,
+        connection: connection,
+        queue: WorkQueueCoordinator(repository: repository),
+      );
+      final now = DateTime.now().toUtc();
+      final request = WorkRequest(
+        requestId: 'receipt-sequence',
+        message: message,
+        workId: work.id,
+        workRevision: work.revision,
+        sourceDeviceId: 'phone',
+        targetDeviceId: 'desktop',
+        createdAt: now,
+        expiresAt: now.add(const Duration(hours: 1)),
+      );
+      await repository.saveRequest(request);
+      final newest = WorkReceipt(
+        requestId: request.requestId,
+        workId: work.id,
+        status: WorkReceiptStatus.succeeded,
+        sequence: 2,
+        createdAt: now,
+      );
+      await router.receive({'type': 'workReceipt', 'receipt': newest.toJson()});
+      final stale = WorkReceipt(
+        requestId: request.requestId,
+        workId: work.id,
+        status: WorkReceiptStatus.processing,
+        sequence: 1,
+        createdAt: now,
+      );
+      final result = await router.receive({
+        'type': 'workReceipt',
+        'receipt': stale.toJson(),
+      });
+      expect(result.status, WorkReceiptStatus.succeeded);
+      expect((await repository.getReceipt(request.requestId))!.sequence, 2);
     });
 
     test('restores a durable request after a queue restart', () async {
