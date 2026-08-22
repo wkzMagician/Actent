@@ -29,6 +29,7 @@ class ActentHomePage extends StatefulWidget {
     this.repository,
     this.shareBridge,
     this.deviceId,
+    this.deviceDisplayName,
     this.publicKey,
     this.relayTopic,
     this.relayServer,
@@ -61,6 +62,7 @@ class ActentHomePage extends StatefulWidget {
   final ActentRepository? repository;
   final AndroidShareBridge? shareBridge;
   final String? deviceId;
+  final String? deviceDisplayName;
   final String? publicKey;
   final String? relayTopic;
   final Uri? relayServer;
@@ -113,6 +115,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
   AttachmentRetention _retention = AttachmentRetention.sevenDays;
   late Duration _packetDedupRetention;
 
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
+  bool get _isIos => defaultTargetPlatform == TargetPlatform.iOS;
+  bool get _supportsNetworkWork => _isAndroid || _isIos;
+
   List<_ActentPageData> _pages(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return [
@@ -161,8 +167,45 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _loadRepositoryData(ActentRepository repository) async {
+    final l10n = AppLocalizations.of(context)!;
     final messages = await repository.listMessages();
     var works = await repository.listWorks();
+    final localDeviceId = widget.deviceId ?? 'local-device';
+    final localNullId = 'null-$localDeviceId';
+    var localCatalogChanged = false;
+    final existingNull = works
+        .where((work) => work.id == localNullId)
+        .firstOrNull;
+    if (existingNull == null) {
+      final nullWork = Work.nullWork(
+        id: localNullId,
+        ownerDeviceId: localDeviceId,
+        name: l10n.nullWork,
+      );
+      await repository.saveWork(nullWork);
+      works = [...works, nullWork];
+      localCatalogChanged = true;
+    } else if (existingNull.name == 'Null' &&
+        existingNull.name != l10n.nullWork) {
+      final renamedNull = Work(
+        id: existingNull.id,
+        revision: existingNull.revision + 1,
+        name: l10n.nullWork,
+        ownerDeviceId: existingNull.ownerDeviceId,
+        allowedSourceDeviceIds: existingNull.allowedSourceDeviceIds,
+        acceptedContentTypes: existingNull.acceptedContentTypes,
+        timeout: existingNull.timeout,
+        queueLimit: existingNull.queueLimit,
+        enabled: existingNull.enabled,
+        platformBindings: existingNull.platformBindings,
+        catalogVisibility: existingNull.catalogVisibility,
+      );
+      await repository.saveWork(renamedNull);
+      works = [
+        for (final work in works) work.id == localNullId ? renamedNull : work,
+      ];
+      localCatalogChanged = true;
+    }
     if (widget.shareBridge != null &&
         !works.any((work) => work.id == 'android-share')) {
       final shareWork = Work(
@@ -182,6 +225,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       );
       await repository.saveWork(shareWork);
       works = [...works, shareWork];
+      localCatalogChanged = true;
     }
     final devices = await repository.listDevices();
     final requests = await repository.listRequests();
@@ -210,6 +254,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ..clear()
         ..addAll(statuses);
     });
+    if (localCatalogChanged) await _publishCatalogChanges();
     final queue = _queue;
     if (queue != null) {
       for (final work in works) {
@@ -240,7 +285,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   launcher: bridge.intentLauncher,
                 ),
               );
-            case 'android-http' when widget.shareBridge != null:
+            case 'android-http' when _supportsNetworkWork:
               queue.register(
                 work.id,
                 AndroidHttpRunner(
@@ -249,6 +294,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   secrets: _AndroidSecretResolver(widget.desktopSecrets),
                 ),
               );
+            case 'ios-url' when _isIos:
+              queue.register(work.id, IosUrlBinding.fromWork(work).toRunner());
           }
         } on WorkBindingException {
           // Invalid work definitions remain visible for correction in Works.
@@ -698,58 +745,80 @@ class _ActentHomePageState extends State<ActentHomePage> {
         : ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              for (final work in _works)
-                Card(
-                  child: ListTile(
-                    leading: IconButton(
-                      tooltip: l10n.runWork,
-                      onPressed: work.enabled && _isSelectableWork(work)
-                          ? () => _showMessagePicker(work)
-                          : null,
-                      icon: const Icon(Icons.play_arrow_outlined),
-                    ),
-                    title: Text(work.name),
-                    subtitle: Text(
-                      '${_workOwnerLabel(work, l10n)} · '
-                      '${work.id} · revision ${work.revision} · '
-                      '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
-                    ),
-                    trailing: _isLocalWork(work)
-                        ? PopupMenuButton<String>(
-                            onSelected: (value) async {
-                              switch (value) {
-                                case 'edit':
-                                  await _editWork(work);
-                                case 'toggle':
-                                  await _toggleWork(work);
-                                case 'delete':
-                                  await _deleteWork(work);
-                              }
-                            },
-                            itemBuilder: (context) => [
-                              if (_canEditWork(work))
-                                PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text(l10n.edit),
-                                ),
-                              PopupMenuItem(
-                                value: 'toggle',
-                                child: Text(
-                                  work.enabled ? l10n.disable : l10n.enable,
-                                ),
-                              ),
-                              if (work.id != 'android-share')
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text(l10n.delete),
-                                ),
-                            ],
-                          )
-                        : null,
+              for (final group in _worksByOwner(l10n)) ...[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Text(
+                    group.$1,
+                    style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
+                for (final work in group.$2)
+                  Card(
+                    child: ListTile(
+                      leading: IconButton(
+                        tooltip: l10n.runWork,
+                        onPressed: work.enabled && _isSelectableWork(work)
+                            ? () => _showMessagePicker(work)
+                            : null,
+                        icon: const Icon(Icons.play_arrow_outlined),
+                      ),
+                      title: Text(work.name),
+                      subtitle: Text(
+                        '${_workOwnerLabel(work, l10n)} · '
+                        '${work.id} · revision ${work.revision} · '
+                        '${work.enabled ? AppLocalizations.of(context)!.enable : AppLocalizations.of(context)!.disable}',
+                      ),
+                      trailing: _isLocalWork(work)
+                          ? PopupMenuButton<String>(
+                              onSelected: (value) async {
+                                switch (value) {
+                                  case 'edit':
+                                    await _editWork(work);
+                                  case 'toggle':
+                                    await _toggleWork(work);
+                                  case 'delete':
+                                    await _deleteWork(work);
+                                }
+                              },
+                              itemBuilder: (context) => [
+                                if (_canEditWork(work))
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Text(l10n.edit),
+                                  ),
+                                PopupMenuItem(
+                                  value: 'toggle',
+                                  child: Text(
+                                    work.enabled ? l10n.disable : l10n.enable,
+                                  ),
+                                ),
+                                if (work.id != 'android-share')
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Text(l10n.delete),
+                                  ),
+                              ],
+                            )
+                          : null,
+                    ),
+                  ),
+              ],
             ],
           );
+  }
+
+  List<(String, List<Work>)> _worksByOwner(AppLocalizations l10n) {
+    final groups = <String, List<Work>>{};
+    for (final work in _works) {
+      groups.putIfAbsent(_workOwnerLabel(work, l10n), () => []).add(work);
+    }
+    final result = groups.entries.map((entry) {
+      entry.value.sort((a, b) => a.name.compareTo(b.name));
+      return (entry.key, entry.value);
+    }).toList();
+    result.sort((a, b) => a.$1.compareTo(b.$1));
+    return result;
   }
 
   bool _isLocalWork(Work work) =>
@@ -780,10 +849,71 @@ class _ActentHomePageState extends State<ActentHomePage> {
     AttachmentRetention.forever => l10n.retentionForever,
   };
 
-  Future<void> _showAddWork() {
-    if (kIsWeb) return _addWebJsWork();
-    if (widget.canEditWorks) return _addDesktopWork();
-    return _addNullWork();
+  Future<void> _showAddWork() async {
+    final l10n = AppLocalizations.of(context)!;
+    final type = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.chooseWorkType),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.archive_outlined),
+                title: Text(l10n.nullWorkType),
+                onTap: () => Navigator.pop(dialogContext, 'null'),
+              ),
+              if (widget.canEditWorks)
+                ListTile(
+                  leading: const Icon(Icons.terminal),
+                  title: Text(l10n.scriptWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'script'),
+                ),
+              if (kIsWeb)
+                ListTile(
+                  leading: const Icon(Icons.javascript),
+                  title: Text(l10n.javaScriptWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'javascript'),
+                ),
+              if (_isAndroid && widget.shareBridge != null)
+                ListTile(
+                  leading: const Icon(Icons.apps_outlined),
+                  title: Text(l10n.applicationWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'application'),
+                ),
+              if (_isIos)
+                ListTile(
+                  leading: const Icon(Icons.apps_outlined),
+                  title: Text(l10n.applicationWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'iosApplication'),
+                ),
+              if (_supportsNetworkWork)
+                ListTile(
+                  leading: const Icon(Icons.http),
+                  title: Text(l10n.networkWorkType),
+                  onTap: () => Navigator.pop(dialogContext, 'network'),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    switch (type) {
+      case 'null':
+        await _addNullWork();
+      case 'script':
+        await _addDesktopWork();
+      case 'javascript':
+        await _addWebJsWork();
+      case 'application':
+        await _addAndroidApplicationWork();
+      case 'iosApplication':
+        await _addIosApplicationWork();
+      case 'network':
+        await _addAndroidNetworkWork();
+    }
   }
 
   Future<void> _addDesktopWork() => _editDesktopWork();
@@ -828,6 +958,179 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ownerDeviceId: widget.deviceId ?? 'local-device',
         acceptedContentTypes: ActentContentType.values.toSet(),
         platformBindings: const {'kind': 'null'},
+      ),
+    );
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
+  }
+
+  Future<void> _addAndroidApplicationWork() async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showDialog<(String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController();
+        final packageName = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.addApplicationWork),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: l10n.name),
+              ),
+              TextField(
+                controller: packageName,
+                decoration: InputDecoration(labelText: l10n.androidPackageName),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, (
+                name.text.trim(),
+                packageName.text.trim(),
+              )),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty) return;
+    await _saveCreatedAndroidWork(
+      name: values.$1,
+      idPrefix: 'android-intent',
+      bindings: {
+        'kind': 'android-intent',
+        'action': 'android.intent.action.SEND',
+        'categories': const <String>[],
+        'extras': const <String, Object?>{},
+        'chooser': true,
+        'attachmentPlacement': 'streams',
+        if (values.$2.isNotEmpty) 'packageName': values.$2,
+      },
+    );
+  }
+
+  Future<void> _addAndroidNetworkWork() async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showDialog<(String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController();
+        final url = TextEditingController(text: 'https://');
+        return AlertDialog(
+          title: Text(l10n.addNetworkWork),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: l10n.name),
+              ),
+              TextField(
+                controller: url,
+                decoration: InputDecoration(labelText: l10n.networkUrl),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, (
+                name.text.trim(),
+                url.text.trim(),
+              )),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
+    await _saveCreatedAndroidWork(
+      name: values.$1,
+      idPrefix: 'android-http',
+      bindings: {
+        'kind': 'android-http',
+        'urlTemplate': values.$2,
+        'method': 'POST',
+        'headers': const <String, String>{},
+        'bodyTemplate': '{{content.text}}',
+      },
+    );
+  }
+
+  Future<void> _addIosApplicationWork() async {
+    final l10n = AppLocalizations.of(context)!;
+    final values = await showDialog<(String, String)?>(
+      context: context,
+      builder: (dialogContext) {
+        final name = TextEditingController();
+        final url = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.addApplicationWork),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: l10n.name),
+              ),
+              TextField(
+                controller: url,
+                decoration: InputDecoration(labelText: l10n.applicationUrl),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, (
+                name.text.trim(),
+                url.text.trim(),
+              )),
+              child: Text(l10n.save),
+            ),
+          ],
+        );
+      },
+    );
+    if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
+    await _saveCreatedAndroidWork(
+      name: values.$1,
+      idPrefix: 'ios-url',
+      bindings: {'kind': 'ios-url', 'urlTemplate': values.$2},
+    );
+  }
+
+  Future<void> _saveCreatedAndroidWork({
+    required String name,
+    required String idPrefix,
+    required Map<String, Object?> bindings,
+  }) async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    await repository.saveWork(
+      Work(
+        id: '$idPrefix-${DateTime.now().microsecondsSinceEpoch}',
+        revision: 1,
+        name: name,
+        ownerDeviceId: widget.deviceId ?? 'local-device',
+        acceptedContentTypes: ActentContentType.values.toSet(),
+        platformBindings: bindings,
       ),
     );
     await _publishCatalogChanges();
@@ -1145,7 +1448,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (router == null) return;
     for (final device in _devices.where((device) => device.authorized)) {
       try {
-        await router.sendCatalogDelta(device.id);
+        // Snapshots are idempotent and repair a peer that restarted or missed
+        // an earlier delta. Work catalogs are small, so correctness wins here.
+        await router.sendCatalogSnapshot(device.id);
       } on Object {
         // The next reconnect receives a fresh catalog snapshot.
       }
@@ -1331,7 +1636,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       port: port,
       deviceId: widget.deviceId ?? 'local-device',
       publicKey: widget.publicKey ?? 'local-public-key',
-      displayName: 'Actent ${widget.deviceId ?? 'device'}',
+      displayName: widget.deviceDisplayName ?? 'Actent device',
       platform: 'paired',
       relayUrl: widget.pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
       relayTopic: widget.relayTopic ?? '',
@@ -1434,7 +1739,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (lanServer != null) {
       final advertiser = MdnsPairingAdvertiser(
         deviceId: widget.deviceId ?? 'local-device',
-        displayName: 'Actent ${widget.deviceId ?? 'device'}',
+        displayName: widget.deviceDisplayName ?? 'Actent device',
         platform: 'paired',
         fingerprint: _publicKeyFingerprint(
           widget.publicKey ?? 'local-public-key',
@@ -1591,7 +1896,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         invite: invite,
         deviceId: widget.deviceId ?? 'local-device',
         publicKey: widget.publicKey ?? 'local-public-key',
-        displayName: 'Actent ${widget.deviceId ?? 'device'}',
+        displayName: widget.deviceDisplayName ?? 'Actent device',
         platform: 'paired',
         relayUrl: pairingHandshake.server.toString(),
         relayTopic: widget.relayTopic ?? '',

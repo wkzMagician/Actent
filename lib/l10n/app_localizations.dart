@@ -428,6 +428,72 @@ abstract class AppLocalizations {
   /// **'Add Work'**
   String get addWork;
 
+  /// No description provided for @chooseWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Work type'**
+  String get chooseWorkType;
+
+  /// No description provided for @nullWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Null Work'**
+  String get nullWorkType;
+
+  /// No description provided for @scriptWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Script Work'**
+  String get scriptWorkType;
+
+  /// No description provided for @javaScriptWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'JavaScript Work'**
+  String get javaScriptWorkType;
+
+  /// No description provided for @applicationWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Application Work'**
+  String get applicationWorkType;
+
+  /// No description provided for @networkWorkType.
+  ///
+  /// In en, this message translates to:
+  /// **'Network Work'**
+  String get networkWorkType;
+
+  /// No description provided for @addApplicationWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Application Work'**
+  String get addApplicationWork;
+
+  /// No description provided for @addNetworkWork.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Network Work'**
+  String get addNetworkWork;
+
+  /// No description provided for @androidPackageName.
+  ///
+  /// In en, this message translates to:
+  /// **'Application package name (optional)'**
+  String get androidPackageName;
+
+  /// No description provided for @networkUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Network URL'**
+  String get networkUrl;
+
+  /// No description provided for @applicationUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Application URL or URL scheme'**
+  String get applicationUrl;
+
   /// No description provided for @edit.
   ///
   /// In en, this message translates to:

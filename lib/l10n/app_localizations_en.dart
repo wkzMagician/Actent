@@ -191,6 +191,39 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addWork => 'Add Work';
 
   @override
+  String get chooseWorkType => 'Choose Work type';
+
+  @override
+  String get nullWorkType => 'Null Work';
+
+  @override
+  String get scriptWorkType => 'Script Work';
+
+  @override
+  String get javaScriptWorkType => 'JavaScript Work';
+
+  @override
+  String get applicationWorkType => 'Application Work';
+
+  @override
+  String get networkWorkType => 'Network Work';
+
+  @override
+  String get addApplicationWork => 'Add Application Work';
+
+  @override
+  String get addNetworkWork => 'Add Network Work';
+
+  @override
+  String get androidPackageName => 'Application package name (optional)';
+
+  @override
+  String get networkUrl => 'Network URL';
+
+  @override
+  String get applicationUrl => 'Application URL or URL scheme';
+
+  @override
   String get edit => 'Edit';
 
   @override

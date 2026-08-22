@@ -6,8 +6,8 @@
   "startupFailed": "Actent 启动失败",
   "trayQuit": "退出 Actent",
   "activity": "活动",
-  "activityDescription": "输入内容及 Work 执行记录会显示在这里。",
-  "works": "Work",
+  "activityDescription": "输入内容及任务执行记录会显示在这里。",
+  "works": "任务",
   "worksDescription": "创建和管理此设备上可用的操作。",
   "devices": "设备",
   "devicesDescription": "通过局域网或邀请码配对设备。",
@@ -25,9 +25,9 @@
   "currentRetention": "当前保留时间：{value}",
   "packetDeduplicationRetention": "数据包去重保留",
   "exportConfiguration": "导出配置",
-  "exportConfigurationDescription": "仅包含 Work 和设备端点，不包含凭据或历史记录。",
+  "exportConfigurationDescription": "仅包含任务和设备端点，不包含凭据或历史记录。",
   "importConfiguration": "导入配置",
-  "importConfigurationDescription": "合并导出的 Work 和设备端点。",
+  "importConfigurationDescription": "合并导出的任务和设备端点。",
   "language": "语言",
   "languageDescription": "选择 Actent 使用的语言。",
   "languageEnglish": "English",
@@ -43,32 +43,43 @@
   "saveFailed": "保存失败：{error}",
   "lanDiscoveryUnavailable": "局域网发现不可用。VPN/TUN 网卡或 Windows 网络配置可能阻止了多播。",
   "lanNoDevices": "没有发现可配对的设备。"
-  ,"chooseWork": "选择 Work"
-  ,"chooseWorkDescription": "选择要处理这条共享内容的 Work。"
+  ,"chooseWork": "选择任务"
+  ,"chooseWorkDescription": "选择要处理这条共享内容的任务。"
   ,"thisDevice": "本设备"
   ,"remoteDevice": "远程设备"
-  ,"nullWork": "Null — 保存在本地"
+  ,"nullWork": "空任务 — 保存在本地"
   ,"discard": "丢弃"
   ,"close": "关闭"
   ,"runAgain": "再次运行"
   ,"cancelPendingRequests": "取消待处理请求"
   ,"deleteMessage": "删除消息"
   ,"pairDevice": "配对设备"
-  ,"addWork": "新增 Work"
+  ,"addWork": "新增任务"
+  ,"chooseWorkType": "选择任务类型"
+  ,"nullWorkType": "空任务"
+  ,"scriptWorkType": "脚本任务"
+  ,"javaScriptWorkType": "JavaScript 任务"
+  ,"applicationWorkType": "应用程序任务"
+  ,"networkWorkType": "网络任务"
+  ,"addApplicationWork": "新增应用程序任务"
+  ,"addNetworkWork": "新增网络任务"
+  ,"androidPackageName": "应用包名（可选）"
+  ,"networkUrl": "网络 URL"
+  ,"applicationUrl": "应用程序 URL 或 URL Scheme"
   ,"edit": "编辑"
   ,"enable": "启用"
   ,"disable": "停用"
   ,"delete": "删除"
-  ,"addJavaScriptWork": "新增 JavaScript Work"
-  ,"editJavaScriptWork": "编辑 JavaScript Work"
-  ,"addScriptWork": "新增脚本 Work"
-  ,"editScriptWork": "编辑脚本 Work"
+  ,"addJavaScriptWork": "新增 JavaScript 任务"
+  ,"editJavaScriptWork": "编辑 JavaScript 任务"
+  ,"addScriptWork": "新增脚本任务"
+  ,"editScriptWork": "编辑脚本任务"
   ,"name": "名称"
   ,"javaScriptBody": "JavaScript 内容"
   ,"allowedNetworkHosts": "允许的网络主机（每行一个）"
   ,"absoluteExecutablePath": "可执行文件绝对路径"
   ,"argumentsOnePerLine": "参数（每行一个）"
-  ,"deleteWorkTitle": "删除 Work？"
+  ,"deleteWorkTitle": "删除任务？"
   ,"deleteWorkMessage": "删除“{name}”并取消待处理请求？"
   ,"relaySettingsTitle": "Relay 设置"
   ,"saveFailedWithError": "保存失败：{error}"
@@ -81,7 +92,7 @@
   ,"import": "导入"
   ,"importFailedWithError": "导入失败：{error}"
   ,"removePairedDeviceTitle": "移除已配对设备？"
-  ,"removePairedDeviceMessage": "移除 {name} 及其远程 Work 目录？现有活动记录会保留。"
+  ,"removePairedDeviceMessage": "移除 {name} 及其远程任务目录？现有活动记录会保留。"
   ,"remove": "移除"
   ,"discoverOnLan": "发现局域网设备"
   ,"pasteInvitation": "粘贴邀请"
@@ -108,17 +119,17 @@
   ,"scanPairingQrDescription": "扫描此二维码以配对设备。"
   ,"copyInvitationLink": "复制邀请链接"
   ,"invitationLinkCopied": "邀请链接已复制。"
-  ,"runWork": "运行 Work"
+  ,"runWork": "运行任务"
   ,"chooseWorkInput": "选择输入内容"
-  ,"chooseWorkInputDescription": "选择要发送到此 Work 的兼容活动内容。"
-  ,"noMessagesAvailable": "没有可供此 Work 运行的兼容活动内容。"
-  ,"workRequestFailed": "Work 请求失败：{error}"
+  ,"chooseWorkInputDescription": "选择要发送到此任务的兼容活动内容。"
+  ,"noMessagesAvailable": "没有可供此任务运行的兼容活动内容。"
+  ,"workRequestFailed": "任务请求失败：{error}"
   ,"pairingCode": "配对码：{code}"
   ,"pairingCodeDescription": "请在另一台设备输入此代码，以确认两台设备正在互相配对。"
   ,"fileSelectionFailed": "无法选择文件：{error}"
   ,"chooseInputType": "选择输入类型"
-  ,"chooseInputTypeDescription": "选择要发送到此 Work 的内容类型。"
-  ,"inputTypeNotAccepted": "所选 Work 不接受此文件类型。"
+  ,"chooseInputTypeDescription": "选择要发送到此任务的内容类型。"
+  ,"inputTypeNotAccepted": "所选任务不接受此文件类型。"
   ,"inputText": "文本"
   ,"inputUrl": "链接"
   ,"inputImage": "图片"

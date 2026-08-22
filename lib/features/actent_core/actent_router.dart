@@ -401,7 +401,10 @@ class ActentRouter {
     for (final workId in previous.difference(
       target.works.map((work) => work.id).toSet(),
     )) {
-      await repository.deleteWork(workId);
+      final existing = await repository.getWork(workId);
+      if (existing?.ownerDeviceId == ownerDeviceId) {
+        await repository.deleteWork(workId);
+      }
     }
   }
 
@@ -442,7 +445,10 @@ class ActentRouter {
       await repository.saveWork(work);
     }
     for (final workId in removed) {
-      await repository.deleteWork(workId);
+      final existing = await repository.getWork(workId);
+      if (existing?.ownerDeviceId == ownerDeviceId) {
+        await repository.deleteWork(workId);
+      }
     }
   }
 

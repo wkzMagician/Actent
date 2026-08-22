@@ -1,5 +1,6 @@
 import 'android/android_work_runner.dart';
 import 'desktop/desktop_script_runner.dart';
+import 'ios/ios_work_runner.dart';
 import 'web_js_work.dart';
 import '../actent_core/actent_models.dart';
 
@@ -115,6 +116,19 @@ class AndroidHttpBinding {
       ),
     );
   }
+}
+
+class IosUrlBinding {
+  const IosUrlBinding({required this.urlTemplate});
+
+  final String urlTemplate;
+
+  factory IosUrlBinding.fromWork(Work work) {
+    final binding = _binding(work, 'ios-url');
+    return IosUrlBinding(urlTemplate: _string(binding, 'urlTemplate'));
+  }
+
+  IosUrlWorkRunner toRunner() => IosUrlWorkRunner(urlTemplate: urlTemplate);
 }
 
 class WebJsBinding {

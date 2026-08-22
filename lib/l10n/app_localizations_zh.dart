@@ -28,10 +28,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get activity => '活动';
 
   @override
-  String get activityDescription => '输入内容及 Work 执行记录会显示在这里。';
+  String get activityDescription => '输入内容及任务执行记录会显示在这里。';
 
   @override
-  String get works => 'Work';
+  String get works => '任务';
 
   @override
   String get worksDescription => '创建和管理此设备上可用的操作。';
@@ -87,13 +87,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exportConfiguration => '导出配置';
 
   @override
-  String get exportConfigurationDescription => '仅包含 Work 和设备端点，不包含凭据或历史记录。';
+  String get exportConfigurationDescription => '仅包含任务和设备端点，不包含凭据或历史记录。';
 
   @override
   String get importConfiguration => '导入配置';
 
   @override
-  String get importConfigurationDescription => '合并导出的 Work 和设备端点。';
+  String get importConfigurationDescription => '合并导出的任务和设备端点。';
 
   @override
   String get language => '语言';
@@ -144,10 +144,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lanNoDevices => '没有发现可配对的设备。';
 
   @override
-  String get chooseWork => '选择 Work';
+  String get chooseWork => '选择任务';
 
   @override
-  String get chooseWorkDescription => '选择要处理这条共享内容的 Work。';
+  String get chooseWorkDescription => '选择要处理这条共享内容的任务。';
 
   @override
   String get thisDevice => '本设备';
@@ -156,7 +156,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get remoteDevice => '远程设备';
 
   @override
-  String get nullWork => 'Null — 保存在本地';
+  String get nullWork => '空任务 — 保存在本地';
 
   @override
   String get discard => '丢弃';
@@ -177,7 +177,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairDevice => '配对设备';
 
   @override
-  String get addWork => '新增 Work';
+  String get addWork => '新增任务';
+
+  @override
+  String get chooseWorkType => '选择任务类型';
+
+  @override
+  String get nullWorkType => '空任务';
+
+  @override
+  String get scriptWorkType => '脚本任务';
+
+  @override
+  String get javaScriptWorkType => 'JavaScript 任务';
+
+  @override
+  String get applicationWorkType => '应用程序任务';
+
+  @override
+  String get networkWorkType => '网络任务';
+
+  @override
+  String get addApplicationWork => '新增应用程序任务';
+
+  @override
+  String get addNetworkWork => '新增网络任务';
+
+  @override
+  String get androidPackageName => '应用包名（可选）';
+
+  @override
+  String get networkUrl => '网络 URL';
+
+  @override
+  String get applicationUrl => '应用程序 URL 或 URL Scheme';
 
   @override
   String get edit => '编辑';
@@ -192,16 +225,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get delete => '删除';
 
   @override
-  String get addJavaScriptWork => '新增 JavaScript Work';
+  String get addJavaScriptWork => '新增 JavaScript 任务';
 
   @override
-  String get editJavaScriptWork => '编辑 JavaScript Work';
+  String get editJavaScriptWork => '编辑 JavaScript 任务';
 
   @override
-  String get addScriptWork => '新增脚本 Work';
+  String get addScriptWork => '新增脚本任务';
 
   @override
-  String get editScriptWork => '编辑脚本 Work';
+  String get editScriptWork => '编辑脚本任务';
 
   @override
   String get name => '名称';
@@ -219,7 +252,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get argumentsOnePerLine => '参数（每行一个）';
 
   @override
-  String get deleteWorkTitle => '删除 Work？';
+  String get deleteWorkTitle => '删除任务？';
 
   @override
   String deleteWorkMessage(Object name) {
@@ -267,7 +300,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String removePairedDeviceMessage(Object name) {
-    return '移除 $name 及其远程 Work 目录？现有活动记录会保留。';
+    return '移除 $name 及其远程任务目录？现有活动记录会保留。';
   }
 
   @override
@@ -359,20 +392,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get invitationLinkCopied => '邀请链接已复制。';
 
   @override
-  String get runWork => '运行 Work';
+  String get runWork => '运行任务';
 
   @override
   String get chooseWorkInput => '选择输入内容';
 
   @override
-  String get chooseWorkInputDescription => '选择要发送到此 Work 的兼容活动内容。';
+  String get chooseWorkInputDescription => '选择要发送到此任务的兼容活动内容。';
 
   @override
-  String get noMessagesAvailable => '没有可供此 Work 运行的兼容活动内容。';
+  String get noMessagesAvailable => '没有可供此任务运行的兼容活动内容。';
 
   @override
   String workRequestFailed(Object error) {
-    return 'Work 请求失败：$error';
+    return '任务请求失败：$error';
   }
 
   @override
@@ -392,10 +425,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseInputType => '选择输入类型';
 
   @override
-  String get chooseInputTypeDescription => '选择要发送到此 Work 的内容类型。';
+  String get chooseInputTypeDescription => '选择要发送到此任务的内容类型。';
 
   @override
-  String get inputTypeNotAccepted => '所选 Work 不接受此文件类型。';
+  String get inputTypeNotAccepted => '所选任务不接受此文件类型。';
 
   @override
   String get inputText => '文本';
