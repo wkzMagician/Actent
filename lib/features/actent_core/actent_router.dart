@@ -247,6 +247,49 @@ class ActentRouter {
     );
   }
 
+  /// Reruns only the failed step using the output persisted by the preceding
+  /// successful step. A new Workflow execution is not created.
+  Future<WorkflowExecution> continueWorkflow(
+    Workflow workflow,
+    WorkflowExecution execution,
+  ) async {
+    final runner = WorkflowRunner(
+      repository: repository,
+      validator: WorkflowValidator(
+        repository: repository,
+        localDeviceId: deviceId,
+      ),
+    );
+    final seed = ActentMessage(
+      id: 'workflow-continue-${execution.id}',
+      traceId: execution.id,
+      createdAt: execution.createdAt,
+      source: ActentSource(kind: 'workflow', deviceId: deviceId),
+      payload: execution.output ?? ActentPayload(type: ActentContentType.none),
+    );
+    return runner.continueFailed(
+      workflow: workflow,
+      execution: execution,
+      executeStep:
+          ({
+            required step,
+            required work,
+            required input,
+            required executionId,
+          }) async {
+            final request = await route(
+              _workflowMessage(seed, input, step.id),
+              work,
+              targetDeviceId: step.deviceId,
+              workflowExecutionId: executionId,
+              workflowStepId: step.id,
+              workflowOwnerDeviceId: workflow.ownerDeviceId,
+            );
+            return _waitForTerminalReceipt(request.requestId);
+          },
+    );
+  }
+
   Future<WorkReceipt> _waitForTerminalReceipt(String requestId) async {
     final deadline = DateTime.now().add(const Duration(hours: 24));
     while (DateTime.now().isBefore(deadline)) {

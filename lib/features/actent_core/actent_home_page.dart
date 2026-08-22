@@ -105,6 +105,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<ActentMessage> _messages = [];
   final List<Work> _works = [];
   final List<Workflow> _workflows = [];
+  final List<WorkflowExecution> _workflowExecutions = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
   String? _pendingWorkName;
@@ -184,6 +185,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final messages = await repository.listMessages();
     var works = await repository.listWorks();
     final workflows = await repository.listWorkflows();
+    final workflowExecutions = await repository.listWorkflowExecutions();
     final localDeviceId = widget.deviceId ?? 'local-device';
     final localNullId = 'null-$localDeviceId';
     var localCatalogChanged = false;
@@ -275,6 +277,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _workflows
         ..clear()
         ..addAll(workflows);
+      _workflowExecutions
+        ..clear()
+        ..addAll(workflowExecutions);
       _devices
         ..clear()
         ..addAll(devices);
@@ -868,7 +873,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Widget _workflowsPage(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    if (_workflows.isEmpty) return _emptyPage(_pages(context)[2]);
+    if (_workflows.isEmpty && _workflowExecutions.isEmpty) {
+      return _emptyPage(_pages(context)[2]);
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -908,8 +915,45 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   : null,
             ),
           ),
+        for (final execution in _workflowExecutions.reversed)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.history_outlined),
+              title: Text(
+                _workflows
+                        .where(
+                          (workflow) => workflow.id == execution.workflowId,
+                        )
+                        .firstOrNull
+                        ?.name ??
+                    execution.workflowId,
+              ),
+              subtitle: Text(
+                '${execution.status.value} · step ${execution.currentStepIndex + 1}',
+              ),
+              trailing: execution.status == WorkflowExecutionStatus.failed
+                  ? TextButton(
+                      onPressed: () => _continueWorkflow(execution),
+                      child: Text(l10n.continueLabel),
+                    )
+                  : null,
+            ),
+          ),
       ],
     );
+  }
+
+  Future<void> _continueWorkflow(WorkflowExecution execution) async {
+    final router = widget.router;
+    final repository = widget.repository;
+    if (router == null || repository == null) return;
+    final workflow = await repository.getWorkflow(execution.workflowId);
+    if (workflow == null) return;
+    final updated = await router.continueWorkflow(workflow, execution);
+    await _loadRepositoryData(repository);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(updated.status.value)));
   }
 
   bool _isLocalWorkflow(Workflow workflow) =>
