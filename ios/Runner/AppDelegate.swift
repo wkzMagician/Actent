@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private static var openFilesChannel: FlutterMethodChannel?
+  private static var iosWorkChannel: FlutterMethodChannel?
   private static var pendingOpenFiles: [String] = []
 
   override func application(
@@ -15,7 +16,11 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "ActentOpenFiles")
+    guard let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "ActentOpenFiles"
+    ) else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "actent/open_files",
       binaryMessenger: registrar.messenger()
@@ -24,6 +29,23 @@ import UIKit
     if !Self.pendingOpenFiles.isEmpty {
       channel.invokeMethod("openFiles", arguments: Self.pendingOpenFiles)
       Self.pendingOpenFiles.removeAll()
+    }
+    let workChannel = FlutterMethodChannel(
+      name: "actent/ios_work",
+      binaryMessenger: registrar.messenger()
+    )
+    Self.iosWorkChannel = workChannel
+    workChannel.setMethodCallHandler { call, result in
+      guard call.method == "openUrl",
+            let arguments = call.arguments as? [String: Any],
+            let value = arguments["url"] as? String,
+            let url = URL(string: value) else {
+        result(FlutterError(code: "invalid_url", message: "A valid URL is required", details: nil))
+        return
+      }
+      UIApplication.shared.open(url, options: [:]) { opened in
+        result(opened)
+      }
     }
   }
 

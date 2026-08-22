@@ -22,6 +22,7 @@ class DartloomApp extends StatefulWidget {
     this.repository,
     this.shareBridge,
     this.deviceId,
+    this.deviceDisplayName,
     this.publicKey,
     this.relayTopic,
     this.relayServer,
@@ -52,6 +53,7 @@ class DartloomApp extends StatefulWidget {
   final ActentRepository? repository;
   final AndroidShareBridge? shareBridge;
   final String? deviceId;
+  final String? deviceDisplayName;
   final String? publicKey;
   final String? relayTopic;
   final Uri? relayServer;
@@ -110,6 +112,7 @@ class _DartloomAppState extends State<DartloomApp> {
       repository: widget.repository,
       shareBridge: widget.shareBridge,
       deviceId: widget.deviceId,
+      deviceDisplayName: widget.deviceDisplayName,
       publicKey: widget.publicKey,
       relayTopic: widget.relayTopic,
       relayServer: widget.relayServer,

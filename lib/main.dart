@@ -16,6 +16,7 @@ import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
 import 'app/pairing_configuration.dart';
+import 'app/device_display_name.dart';
 import 'features/actent_platform/work_input_file_picker.dart';
 import 'features/actent_core/attachment_retention.dart';
 import 'features/actent_core/device_identity.dart';
@@ -117,6 +118,10 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       DeviceIdentityRepository(secretRepository).loadOrCreate(),
       'loading device identity',
     );
+    final deviceDisplayName = await _startupStep(
+      resolveDeviceDisplayName(),
+      'loading device name',
+    );
     final relay = await _startupStep(
       ActentRelaySettings.load(secretRepository),
       'loading relay settings',
@@ -178,7 +183,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       repository.saveDevice(
         Device(
           id: identity.deviceId,
-          displayName: 'Actent ${defaultTargetPlatform.name}',
+          displayName: deviceDisplayName,
           platform: defaultTargetPlatform.name,
           publicKey: identity.publicKey,
           endpoint: {
@@ -205,6 +210,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
           appSettings.write('app.locale', locale.languageCode),
       repository: repository,
       deviceId: identity.deviceId,
+      deviceDisplayName: deviceDisplayName,
       publicKey: identity.publicKey,
       relayTopic: relay.topic,
       relayServer: relay.server,
