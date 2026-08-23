@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../actent_platform/android_share_bridge.dart';
 import '../pairing/pairing.dart';
@@ -112,6 +113,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<WorkflowExecution> _workflowExecutions = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
+  final Map<String, WorkRequest> _latestRequestsByMessage = {};
+  final Map<String, WorkReceipt> _receiptsByRequest = {};
+  String? _selectedActivityId;
   final Map<String, PeerConnectionStatus> _peerConnectionStatusByDevice = {};
   String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
@@ -305,6 +309,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _messageStatuses
         ..clear()
         ..addAll(statuses);
+      _latestRequestsByMessage
+        ..clear()
+        ..addAll(latestRequests);
+      _receiptsByRequest
+        ..clear()
+        ..addAll(receiptsByRequest);
     });
     if (localCatalogChanged) await _publishCatalogChanges();
     final queue = _queue;
@@ -735,53 +745,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final pages = _pages(context);
     final page = pages[_selectedIndex];
     final body = _selectedIndex == 0
-        ? (_messages.isNotEmpty
-              ? ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: _messages.length,
-                  itemBuilder: (context, index) {
-                    final message = _messages[index];
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.share_outlined),
-                        title: Text(_messagePreview(message)),
-                        subtitle: Text(
-                          '${_activityTime(message.createdAt)} · '
-                          '${_activityStatusLabel(_messageStatuses[message.id], AppLocalizations.of(context)!)}',
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                if (value == 'retry') {
-                                  await _retryMessage(message);
-                                } else if (value == 'discard') {
-                                  await _discardMessage(message);
-                                }
-                              },
-                              itemBuilder: (context) => [
-                                PopupMenuItem(
-                                  value: 'retry',
-                                  child: Text(
-                                    AppLocalizations.of(context)!.resend,
-                                  ),
-                                ),
-                                PopupMenuItem(
-                                  value: 'discard',
-                                  child: Text(
-                                    AppLocalizations.of(context)!.discard,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                )
-              : _emptyPage(pages[0]))
+        ? _activityPage(context, pages[0])
         : _selectedIndex == 1
         ? _worksPage(context)
         : _selectedIndex == 2
@@ -2967,9 +2931,98 @@ class _ActentHomePageState extends State<ActentHomePage> {
     );
   }
 
+  Widget _activityPage(BuildContext context, _ActentPageData page) {
+    if (_messages.isEmpty) return _emptyPage(page);
+    final wide = MediaQuery.sizeOf(context).width >= 800;
+    final selected =
+        _messages.where((item) => item.id == _selectedActivityId).firstOrNull ??
+        _messages.first;
+    final list = ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _messages.length,
+      itemBuilder: (context, index) {
+        final message = _messages[index];
+        return Card(
+          color: wide && message.id == selected.id
+              ? Theme.of(context).colorScheme.secondaryContainer
+              : null,
+          child: ListTile(
+            onTap: () {
+              if (wide) {
+                setState(() => _selectedActivityId = message.id);
+              } else {
+                unawaited(_openActivityDetails(message));
+              }
+            },
+            leading: const Icon(Icons.share_outlined),
+            title: Text(_messagePreview(message)),
+            subtitle: Text(
+              '${_activityTime(message.createdAt)} · '
+              '${_activityStatusLabel(_messageStatuses[message.id], AppLocalizations.of(context)!)}',
+            ),
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) async {
+                if (value == 'retry') {
+                  await _retryMessage(message);
+                } else if (value == 'discard') {
+                  await _discardMessage(message);
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: 'retry',
+                  child: Text(AppLocalizations.of(context)!.resend),
+                ),
+                PopupMenuItem(
+                  value: 'discard',
+                  child: Text(AppLocalizations.of(context)!.discard),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!wide) return list;
+    return Row(
+      children: [
+        SizedBox(width: 380, child: list),
+        const VerticalDivider(width: 1),
+        Expanded(child: _activityDetails(selected, embedded: true)),
+      ],
+    );
+  }
+
+  _ActivityDetailPage _activityDetails(
+    ActentMessage message, {
+    bool embedded = false,
+  }) {
+    final request = _latestRequestsByMessage[message.id];
+    final receipt = request == null
+        ? null
+        : _receiptsByRequest[request.requestId];
+    return _ActivityDetailPage(
+      message: message,
+      request: request,
+      receipt: receipt,
+      embedded: embedded,
+      status: _activityStatusLabel(
+        _messageStatuses[message.id],
+        AppLocalizations.of(context)!,
+      ),
+      time: _activityTime(message.createdAt),
+    );
+  }
+
   Future<void> _discardMessage(ActentMessage message) async {
     await _cancelMessageRequests(message);
     await _deleteMessage(message);
+  }
+
+  Future<void> _openActivityDetails(ActentMessage message) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => _activityDetails(message)),
+    );
   }
 
   Future<void> _retryMessage(ActentMessage message) async {
@@ -2998,9 +3051,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         WorkReceiptStatus.cancelling => _ActivityStatus.cancelling,
         WorkReceiptStatus.interrupted => _ActivityStatus.interrupted,
         WorkReceiptStatus.succeeded => _ActivityStatus.succeeded,
-        WorkReceiptStatus.failed ||
-        WorkReceiptStatus.expired ||
-        WorkReceiptStatus.cancelled => _ActivityStatus.failed,
+        WorkReceiptStatus.failed => _ActivityStatus.failed,
+        WorkReceiptStatus.expired => _ActivityStatus.expired,
+        WorkReceiptStatus.cancelled => _ActivityStatus.cancelled,
       };
 
   String _activityStatusLabel(_ActivityStatus? status, AppLocalizations l10n) =>
@@ -3013,6 +3066,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
         _ActivityStatus.cancelling => l10n.activityCancelling,
         _ActivityStatus.interrupted => l10n.activityInterrupted,
         _ActivityStatus.failed => l10n.activityFailed,
+        _ActivityStatus.expired => '已过期',
+        _ActivityStatus.cancelled => '已取消',
         _ActivityStatus.succeeded => l10n.activitySucceeded,
       };
 
@@ -3277,6 +3332,143 @@ class _SharedContentTarget {
   final Workflow? workflow;
 }
 
+class _ActivityDetailPage extends StatelessWidget {
+  const _ActivityDetailPage({
+    required this.message,
+    required this.request,
+    required this.receipt,
+    this.embedded = false,
+    required this.status,
+    required this.time,
+  });
+
+  final ActentMessage message;
+  final WorkRequest? request;
+  final WorkReceipt? receipt;
+  final bool embedded;
+  final String status;
+  final String time;
+
+  @override
+  Widget build(BuildContext context) {
+    final diagnostics = receipt?.diagnostics;
+    final summary = receipt?.summary;
+    final body = ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _detailCard('状态', status),
+        _detailCard('时间', time),
+        _detailCard(
+          '内容',
+          const JsonEncoder.withIndent('  ').convert(message.payload.toJson()),
+        ),
+        if (request != null) ...[
+          _detailCard('任务', request!.workId),
+          _detailCard('请求 ID', request!.requestId),
+          _detailCard('目标设备', request!.targetDeviceId),
+        ],
+        if (receipt?.errorCode != null) _detailCard('错误码', receipt!.errorCode!),
+        if (summary != null && summary.isNotEmpty)
+          _diagnosticCard(context, '错误摘要', summary),
+        if (diagnostics != null) ...[
+          _detailCard('执行阶段', diagnostics.stage),
+          if (diagnostics.exitCode != null)
+            _detailCard('退出码', '${diagnostics.exitCode}'),
+          if (diagnostics.duration != null)
+            _detailCard('耗时', '${diagnostics.duration!.inMilliseconds} ms'),
+          if (diagnostics.stdout != null)
+            _diagnosticCard(
+              context,
+              '标准输出',
+              diagnostics.stdout!,
+              diagnostics.stdoutTruncated,
+            ),
+          if (diagnostics.stderr != null)
+            _diagnosticCard(
+              context,
+              '错误输出',
+              diagnostics.stderr!,
+              diagnostics.stderrTruncated,
+            ),
+        ],
+      ],
+    );
+    if (embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('活动详情')),
+      body: body,
+    );
+  }
+
+  Widget _detailCard(String title, String value) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          SelectableText(value),
+        ],
+      ),
+    ),
+  );
+
+  Widget _diagnosticCard(
+    BuildContext context,
+    String title,
+    String value, [
+    bool truncated = false,
+  ]) {
+    final previewByLines = value.split('\n').take(100).join('\n');
+    final display = previewByLines.length > 8192
+        ? previewByLines.substring(0, 8192)
+        : previewByLines;
+    final omitted = truncated || display.length < value.length;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                IconButton(
+                  tooltip: '复制详细信息',
+                  icon: const Icon(Icons.copy_outlined),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: value));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('已复制详细信息')));
+                    }
+                  },
+                ),
+              ],
+            ),
+            SelectableText(
+              display,
+              style: const TextStyle(fontFamily: 'monospace'),
+            ),
+            if (omitted)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('显示内容已省略；可复制已保留的完整诊断。'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 enum _ActivityStatus {
   sending,
   sendFailed,
@@ -3286,6 +3478,8 @@ enum _ActivityStatus {
   cancelling,
   interrupted,
   failed,
+  expired,
+  cancelled,
   succeeded,
 }
 

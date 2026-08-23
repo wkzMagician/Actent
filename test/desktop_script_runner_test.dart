@@ -33,10 +33,13 @@ void main() {
     );
 
     final decoded = jsonDecode(utf8.decode(process.stdinBytes));
-    expect(decoded['schemaVersion'], actentSchemaVersion);
+    expect(decoded, containsPair('type', 'text'));
+    expect(decoded['data'], containsPair('text', 'hello'));
+    expect(decoded, isNot(contains('payload')));
     expect(result.status, WorkReceiptStatus.failed);
     expect(result.errorCode, 'exit_code_7');
-    expect(result.summary!.length, 8192);
+    expect(result.summary!.length, 9000);
+    expect(result.diagnostics!.stderr!.length, 9000);
     expect(process.terminated, isFalse);
   });
 

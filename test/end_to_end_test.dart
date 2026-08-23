@@ -119,11 +119,12 @@ void main() {
         phoneToDesktopTransport.sent.single.encode(),
         isNot(contains('hello desktop')),
       );
-      expect(
-        (jsonDecode(utf8.decode(_E2eScriptLauncher.input))
-            as Map<String, Object?>)['id'],
-        'shared-1',
-      );
+      final scriptInput = jsonDecode(
+        utf8.decode(_E2eScriptLauncher.input),
+      ) as Map<String, Object?>;
+      expect(scriptInput['type'], 'text');
+      expect(scriptInput['data'], {'text': 'hello desktop'});
+      expect(scriptInput, isNot(contains('id')));
       expect((await desktopRepository.listMessages()).single.id, 'shared-1');
       expect(
         (await desktopRepository.listReceipts()).single.status,

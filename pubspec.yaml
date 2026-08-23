@@ -115,6 +115,7 @@ dependencies:
   flutter_js: ^0.8.7
   file_selector: ^1.0.3
   qr_flutter: ^4.1.0
+  logger: ^2.7.0
 
 dev_dependencies:
   flutter_test:

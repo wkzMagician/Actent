@@ -131,7 +131,7 @@ class DesktopScriptRunner implements WorkRunner {
     required this.config,
     ScriptProcessLauncher? launcher,
     this.secrets,
-    this.maxStderrBytes = 8 * 1024,
+    this.maxStderrBytes = 64 * 1024,
     this.maxStdoutBytes = 1024 * 1024,
   }) : _launcher = launcher ?? const IoScriptProcessLauncher();
 
@@ -158,15 +158,21 @@ class DesktopScriptRunner implements WorkRunner {
     if (runtimeConfig == null) {
       return const WorkRunResult.failure(errorCode: 'secret_unavailable');
     }
+    final startedAt = DateTime.now().toUtc();
     final process = await _launcher.start(runtimeConfig);
     final stderr = BytesBuilder(copy: false);
     final stdout = BytesBuilder(copy: false);
+    var stdoutTruncated = false;
+    var stderrTruncated = false;
     final stdoutDone = process.stdout.listen((chunk) {
       if (stdout.length < maxStdoutBytes) {
         final remaining = maxStdoutBytes - stdout.length;
         stdout.add(
           chunk.length <= remaining ? chunk : chunk.sublist(0, remaining),
         );
+        if (chunk.length > remaining) stdoutTruncated = true;
+      } else {
+        stdoutTruncated = true;
       }
     }).asFuture<void>();
     final stderrDone = process.stderr.listen((chunk) {
@@ -175,49 +181,85 @@ class DesktopScriptRunner implements WorkRunner {
         stderr.add(
           chunk.length <= remaining ? chunk : chunk.sublist(0, remaining),
         );
+        if (chunk.length > remaining) stderrTruncated = true;
+      } else {
+        stderrTruncated = true;
       }
     }).asFuture<void>();
     try {
-      await process.writeStdin(utf8.encode(jsonEncode(message.toJson())));
+      await process.writeStdin(
+        utf8.encode(jsonEncode(message.payload.toJson())),
+      );
       await process.closeStdin();
       final exitCode = await _waitForExit(process, cancellation);
       await Future.wait<void>([stdoutDone, stderrDone]);
+      final completedAt = DateTime.now().toUtc();
+      final stdoutText = utf8.decode(stdout.takeBytes(), allowMalformed: true);
+      final stderrText = utf8.decode(stderr.takeBytes(), allowMalformed: true);
+      final diagnostics = WorkExecutionDiagnostics(
+        stage: exitCode == -2
+            ? 'timeout'
+            : cancellation.isCancelled
+            ? 'cancelled'
+            : exitCode == 0
+            ? 'completed'
+            : 'exited',
+        startedAt: startedAt,
+        completedAt: completedAt,
+        exitCode: exitCode < 0 ? null : exitCode,
+        stdout: stdoutText.isEmpty ? null : stdoutText,
+        stderr: stderrText.isEmpty ? null : stderrText,
+        stdoutTruncated: stdoutTruncated,
+        stderrTruncated: stderrTruncated,
+      );
       if (cancellation.isCancelled) {
-        return const WorkRunResult.failure(errorCode: 'cancelled');
+        return WorkRunResult.failure(
+          errorCode: 'cancelled',
+          diagnostics: diagnostics,
+        );
       }
       if (exitCode == -2) {
-        return const WorkRunResult.failure(errorCode: 'timeout');
+        return WorkRunResult.failure(
+          errorCode: 'timeout',
+          diagnostics: diagnostics,
+        );
       }
       if (exitCode == 0) {
         try {
           return WorkRunResult.success(
             output: parseTextWorkOutput(
               work,
-              utf8.decode(stdout.takeBytes(), allowMalformed: true),
+              stdoutText,
               maxTextBytes: maxStdoutBytes,
             ),
+            diagnostics: diagnostics,
           );
         } on Object catch (error) {
           return WorkRunResult.failure(
             errorCode: 'output_contract_violated',
             summary: error.toString(),
+            diagnostics: diagnostics,
           );
         }
       }
-      final summary = utf8
-          .decode(stderr.takeBytes(), allowMalformed: true)
-          .trim();
+      final summary = stderrText.trim();
       return WorkRunResult.failure(
         errorCode: 'exit_code_$exitCode',
         summary: summary.isEmpty
             ? 'Script exited with code $exitCode.'
             : summary,
+        diagnostics: diagnostics,
       );
     } catch (error) {
       await process.terminateTree();
       return WorkRunResult.failure(
         errorCode: 'script_error',
         summary: error.toString(),
+        diagnostics: WorkExecutionDiagnostics(
+          stage: 'launch',
+          startedAt: startedAt,
+          completedAt: DateTime.now().toUtc(),
+        ),
       );
     }
   }

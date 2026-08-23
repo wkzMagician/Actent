@@ -98,4 +98,22 @@ void main() {
     expect(spec.headers['Content-Type'], 'application/json');
     expect(spec.bodyTemplate, contains('content.text'));
   });
+
+  test('uses an UTF-8 bootstrap for every PowerShell executable', () {
+    final work = Work(
+      id: 'powershell',
+      revision: 1,
+      name: 'PowerShell',
+      ownerDeviceId: 'desktop',
+      platformBindings: const {
+        'kind': 'desktop-shell',
+        'shell': 'pwsh.exe',
+        'source': 'Write-Output "你好"',
+      },
+    );
+
+    final config = DesktopShellBinding.fromWork(work).toConfig(work);
+    expect(config.arguments, contains('-EncodedCommand'));
+    expect(config.arguments, contains('-NoProfile'));
+  });
 }

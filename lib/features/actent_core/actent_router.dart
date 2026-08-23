@@ -156,7 +156,7 @@ class ActentRouter {
       payload: <String, Object?>{
         'type': 'workReceipt',
         'schemaVersion': actentSchemaVersion,
-        'receipt': receipt.toJson(),
+        'receipt': receipt.toRemoteJson(),
       },
     );
   }

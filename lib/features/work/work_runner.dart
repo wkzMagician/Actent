@@ -1,3 +1,5 @@
+import 'package:dartloom_logging/dartloom_logging.dart';
+
 import '../actent_core/actent_models.dart';
 import '../actent_core/actent_store.dart';
 
@@ -21,12 +23,12 @@ class CancellationToken {
 }
 
 class WorkRunResult {
-  const WorkRunResult.success({this.summary, this.output})
+  const WorkRunResult.success({this.summary, this.diagnostics, this.output})
     : status = WorkReceiptStatus.succeeded,
       errorCode = null,
       error = null;
 
-  const WorkRunResult.stored({this.summary, this.output})
+  const WorkRunResult.stored({this.summary, this.diagnostics, this.output})
     : status = WorkReceiptStatus.stored,
       errorCode = null,
       error = null;
@@ -34,6 +36,7 @@ class WorkRunResult {
   const WorkRunResult.failure({
     required this.errorCode,
     this.summary,
+    this.diagnostics,
     this.output,
     this.error,
   }) : status = WorkReceiptStatus.failed;
@@ -41,6 +44,7 @@ class WorkRunResult {
   final WorkReceiptStatus status;
   final String? errorCode;
   final String? summary;
+  final WorkExecutionDiagnostics? diagnostics;
   final WorkError? error;
   final ActentPayload? output;
 }
@@ -117,11 +121,13 @@ class WorkQueueCoordinator {
     required this.repository,
     this.maxParallel = 2,
     this.onReceipt,
+    this.logger,
   }) : assert(maxParallel > 0);
 
   final ActentRepository repository;
   final int maxParallel;
   final WorkReceiptHandler? onReceipt;
+  final AppLogger? logger;
   final Map<String, WorkRunner> _runners = {};
   final List<WorkReceiptHandler> _receiptListeners = [];
   final Map<String, _WorkQueue> _queues = {};
@@ -406,6 +412,7 @@ class WorkQueueCoordinator {
               : executionResult.errorCode,
           error: executionResult.error,
           summary: executionResult.summary,
+          diagnostics: executionResult.diagnostics,
           output: executionResult.output,
         );
       }
@@ -432,6 +439,7 @@ class WorkQueueCoordinator {
     String? errorCode,
     WorkError? error,
     String? summary,
+    WorkExecutionDiagnostics? diagnostics,
     ActentPayload? output,
   }) {
     final sequence = (_receiptSequences[request.requestId] ?? 0) + 1;
@@ -446,12 +454,23 @@ class WorkQueueCoordinator {
       errorCode: errorCode,
       error: error ?? (errorCode == null ? null : WorkError(code: errorCode)),
       summary: summary,
+      diagnostics: diagnostics,
       output: output,
     );
   }
 
   Future<void> _complete(WorkReceipt receipt) async {
     await repository.saveReceipt(receipt);
+    final message =
+        'Work receipt ${receipt.requestId}: ${receipt.status.value}'
+        '${receipt.errorCode == null ? '' : ' (${receipt.errorCode})'}';
+    if (receipt.status == WorkReceiptStatus.failed ||
+        receipt.status == WorkReceiptStatus.expired ||
+        receipt.status == WorkReceiptStatus.cancelled) {
+      logger?.warning(message);
+    } else {
+      logger?.info(message);
+    }
     await onReceipt?.call(receipt);
     for (final listener in List<WorkReceiptHandler>.of(_receiptListeners)) {
       await listener(receipt);

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'android/android_work_runner.dart';
 import 'desktop/desktop_script_runner.dart';
 import 'ios/ios_work_runner.dart';
@@ -81,10 +83,45 @@ class DesktopShellBinding {
 
   DesktopScriptConfig toConfig(Work work) => DesktopScriptConfig(
     executable: shell,
-    arguments: ['-c', source],
+    arguments: _isPowerShell(shell)
+        ? <String>[
+            '-NoLogo',
+            '-NoProfile',
+            '-NonInteractive',
+            '-EncodedCommand',
+            base64Encode(_utf16Le(_powerShellBootstrap(source))),
+          ]
+        : <String>['-c', source],
     timeout: work.timeout,
     validateExecutable: false,
   );
+}
+
+bool _isPowerShell(String value) {
+  final name = value.replaceAll('\\', '/').split('/').last.toLowerCase();
+  return name == 'powershell' ||
+      name == 'powershell.exe' ||
+      name == 'pwsh' ||
+      name == 'pwsh.exe';
+}
+
+String _powerShellBootstrap(String source) =>
+    '''
+\$actentUtf8 = New-Object System.Text.UTF8Encoding(\$false)
+[Console]::InputEncoding = \$actentUtf8
+[Console]::OutputEncoding = \$actentUtf8
+\$OutputEncoding = \$actentUtf8
+$source
+''';
+
+List<int> _utf16Le(String value) {
+  final bytes = <int>[];
+  for (final codeUnit in value.codeUnits) {
+    bytes
+      ..add(codeUnit & 0xff)
+      ..add(codeUnit >> 8);
+  }
+  return bytes;
 }
 
 class DesktopFileBinding {

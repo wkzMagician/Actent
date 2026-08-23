@@ -10,6 +10,7 @@ import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storag
 import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_preferences.dart';
 
 import 'app/app.dart';
+import 'app/actent_logging.dart';
 import 'app/attachment_directory.dart';
 import 'app/object_store_factory.dart';
 import 'app/platform_services.dart';
@@ -31,9 +32,36 @@ import 'features/actent_platform/android_share_bridge.dart';
 import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
-void main([List<String> arguments = const []]) {
+Future<void> main([List<String> arguments = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(_StartupGate(initialFilePaths: arguments));
+  try {
+    await openActentLogService();
+    appLogger.info('Actent logging initialized.');
+  } on Object {
+    // Logging must not prevent the application from starting.
+  }
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    try {
+      appLogger.error(
+        'Unhandled Flutter error.',
+        details.exception,
+        details.stack,
+      );
+    } on Object {
+      // The error was already presented and logging is best effort.
+    }
+  };
+  runZonedGuarded(() => runApp(_StartupGate(initialFilePaths: arguments)), (
+    error,
+    stackTrace,
+  ) {
+    try {
+      appLogger.error('Uncaught asynchronous error.', error, stackTrace);
+    } on Object {
+      // Logging must not become another uncaught error.
+    }
+  });
 }
 
 const _startupTimeout = Duration(seconds: 30);
@@ -167,7 +195,10 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       dedupPreferences.load(),
       'loading packet retention settings',
     );
-    final queue = WorkQueueCoordinator(repository: repository);
+    final queue = WorkQueueCoordinator(
+      repository: repository,
+      logger: appLogger,
+    );
     transport = ActentTransportService(
       deviceId: identity.deviceId,
       identity: identity.packetIdentity,
@@ -328,6 +359,11 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
           return true;
         },
       ).catchError((error, stackTrace) {
+        appLogger.error(
+          'Failed to configure the resident menu.',
+          error,
+          stackTrace,
+        );
         debugPrint('Failed to configure the resident menu: $error');
         debugPrintStack(stackTrace: stackTrace);
       }),

@@ -783,6 +783,7 @@ class WorkReceipt {
     this.errorCode,
     this.error,
     this.summary,
+    this.diagnostics,
     this.output,
   });
 
@@ -795,6 +796,7 @@ class WorkReceipt {
   final String? errorCode;
   final WorkError? error;
   final String? summary;
+  final WorkExecutionDiagnostics? diagnostics;
   final ActentPayload? output;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -808,8 +810,19 @@ class WorkReceipt {
     if (errorCode != null) 'errorCode': errorCode,
     if (error != null) 'error': error!.toJson(),
     if (summary != null) 'summary': summary,
+    if (diagnostics != null) 'diagnostics': diagnostics!.toJson(),
     if (output != null) 'output': output!.toJson(),
   };
+
+  /// The receipt representation sent to a peer deliberately excludes raw
+  /// process output. A script's local diagnostics can contain paths or other
+  /// private machine details and remain on the executing device.
+  Map<String, Object?> toRemoteJson({int maxSummaryCharacters = 4096}) =>
+      <String, Object?>{
+        ...toJson(),
+        if (summary != null)
+          'summary': _limitText(summary!, maxSummaryCharacters),
+      }..remove('diagnostics');
 
   factory WorkReceipt.fromJson(Object? value) {
     final json = _map(value, 'receipt');
@@ -825,12 +838,77 @@ class WorkReceipt {
       errorCode: _optionalString(json, 'errorCode', 'errorCode'),
       error: json['error'] == null ? null : WorkError.fromJson(json['error']),
       summary: _optionalString(json, 'summary', 'summary'),
+      diagnostics: json['diagnostics'] == null
+          ? null
+          : WorkExecutionDiagnostics.fromJson(json['diagnostics']),
       output: json['output'] == null
           ? null
           : ActentPayload.fromJson(json['output']),
     );
   }
 }
+
+/// Bounded local process information for an executed Work. It is stored with
+/// the receipt, while network receipts intentionally omit it.
+class WorkExecutionDiagnostics {
+  const WorkExecutionDiagnostics({
+    required this.stage,
+    this.startedAt,
+    this.completedAt,
+    this.exitCode,
+    this.stdout,
+    this.stderr,
+    this.stdoutTruncated = false,
+    this.stderrTruncated = false,
+  });
+
+  final String stage;
+  final DateTime? startedAt;
+  final DateTime? completedAt;
+  final int? exitCode;
+  final String? stdout;
+  final String? stderr;
+  final bool stdoutTruncated;
+  final bool stderrTruncated;
+
+  Duration? get duration => startedAt == null || completedAt == null
+      ? null
+      : completedAt!.difference(startedAt!);
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'stage': stage,
+    if (startedAt != null) 'startedAt': startedAt!.toUtc().toIso8601String(),
+    if (completedAt != null)
+      'completedAt': completedAt!.toUtc().toIso8601String(),
+    if (exitCode != null) 'exitCode': exitCode,
+    if (stdout != null) 'stdout': stdout,
+    if (stderr != null) 'stderr': stderr,
+    if (stdoutTruncated) 'stdoutTruncated': true,
+    if (stderrTruncated) 'stderrTruncated': true,
+  };
+
+  factory WorkExecutionDiagnostics.fromJson(Object? value) {
+    final json = _map(value, 'diagnostics');
+    return WorkExecutionDiagnostics(
+      stage: _string(json, 'stage', 'diagnostics.stage'),
+      startedAt: json['startedAt'] == null
+          ? null
+          : _date(json, 'startedAt', 'diagnostics.startedAt'),
+      completedAt: json['completedAt'] == null
+          ? null
+          : _date(json, 'completedAt', 'diagnostics.completedAt'),
+      exitCode: json['exitCode'] is int ? json['exitCode'] as int : null,
+      stdout: _optionalString(json, 'stdout', 'diagnostics.stdout'),
+      stderr: _optionalString(json, 'stderr', 'diagnostics.stderr'),
+      stdoutTruncated: json['stdoutTruncated'] == true,
+      stderrTruncated: json['stderrTruncated'] == true,
+    );
+  }
+}
+
+String _limitText(String value, int maximum) => value.length <= maximum
+    ? value
+    : '${value.substring(0, maximum)}\n[truncated]';
 
 class WorkError {
   const WorkError({required this.code, this.message, this.details});
