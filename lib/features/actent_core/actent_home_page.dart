@@ -856,7 +856,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                                     work.enabled ? l10n.disable : l10n.enable,
                                   ),
                                 ),
-                                if (work.id != 'android-share')
+                                if (!_isBuiltInWork(work))
                                   PopupMenuItem(
                                     value: 'delete',
                                     child: Text(l10n.delete),
@@ -1154,6 +1154,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   bool _isLocalWork(Work work) =>
       work.ownerDeviceId == (widget.deviceId ?? 'local-device');
+
+  bool _isBuiltInWork(Work work) =>
+      work.id == 'android-share' ||
+      work.id == 'null-${widget.deviceId ?? 'local-device'}';
 
   bool _canEditWork(Work work) => switch (work.platformBindings['kind']) {
     'null' => true,
@@ -2134,7 +2138,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
     for (final request in await repository.listRequests()) {
       if (request.workId == work.id &&
           await repository.getReceipt(request.requestId) == null) {
-        await widget.router?.cancelRequest(request.requestId);
+        try {
+          await widget.router?.cancelRequest(request.requestId);
+        } on Object {
+          // A remote peer may be offline. Deleting the local definition must
+          // not be blocked by best-effort cancellation of its old request.
+        }
       }
     }
     await repository.deleteWork(work.id);
@@ -2145,15 +2154,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   Future<void> _publishCatalogChanges() async {
     final router = widget.router;
     if (router == null) return;
-    for (final device in _devices.where((device) => device.authorized)) {
-      try {
-        // Snapshots are idempotent and repair a peer that restarted or missed
-        // an earlier delta. Work catalogs are small, so correctness wins here.
-        await router.sendCatalogSnapshot(device.id);
-      } on Object {
-        // The next reconnect receives a fresh catalog snapshot.
-      }
-    }
+    await router.publishCatalogSnapshotToPeers();
   }
 
   Widget _devicesPage(BuildContext context) {

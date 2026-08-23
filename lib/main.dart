@@ -200,7 +200,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       'saving local device information',
     );
     unawaited(_publishDeviceUpdate(router, repository, identity.deviceId));
-    unawaited(_publishCatalogSnapshots(router, repository, identity.deviceId));
+    unawaited(_publishCatalogSnapshots(router));
     resident = await _startupStep(
       createResidentService(),
       'initializing the resident service',
@@ -339,21 +339,8 @@ Future<void> _publishDeviceUpdate(
   }
 }
 
-Future<void> _publishCatalogSnapshots(
-  ActentRouter router,
-  ActentRepository repository,
-  String localDeviceId,
-) async {
-  for (final device in await repository.listDevices()) {
-    if (!device.authorized || device.id == localDeviceId) continue;
-    try {
-      await router.sendCatalogSnapshot(device.id);
-    } on Object {
-      // A peer that is temporarily offline receives a fresh snapshot on the
-      // next startup or after a later local catalog change.
-    }
-  }
-}
+Future<void> _publishCatalogSnapshots(ActentRouter router) async =>
+    router.publishCatalogSnapshotToPeers();
 
 Locale? _localeFromCode(String? code) {
   if (code == null) return null;

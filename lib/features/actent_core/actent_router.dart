@@ -677,6 +677,22 @@ class ActentRouter {
     );
   }
 
+  /// Publishes the complete local catalog to every currently paired peer.
+  ///
+  /// A full snapshot is intentional here: it makes deletions explicit and
+  /// repairs a peer that missed an earlier delta while it was offline.
+  Future<void> publishCatalogSnapshotToPeers() async {
+    for (final device in await repository.listDevices()) {
+      if (!device.authorized || device.id == deviceId) continue;
+      try {
+        await sendCatalogSnapshot(device.id);
+      } on Object {
+        // Delivery is best effort. The next startup or catalog change retries
+        // with another complete snapshot.
+      }
+    }
+  }
+
   /// Shares the current device metadata with an already authenticated peer.
   /// Pairing invitations cannot be updated after they are issued, so this
   /// keeps device names and endpoints current after a rename or app update.

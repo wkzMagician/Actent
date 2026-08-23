@@ -67,15 +67,20 @@ import UIKit
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
+    Self.handleIncomingURL(url)
+    return true
+  }
+
+  static func handleIncomingURL(_ url: URL) {
     if url.scheme == "actent",
        url.host == "share",
        let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
         .queryItems?.first(where: { $0.name == "paths" })?.value {
-      Self.deliverOpenFiles(value.split(separator: ",").map(String.init))
-      return true
+      let paths = value.split(separator: ",").map(String.init)
+      if !paths.isEmpty { deliverOpenFiles(paths) }
+      return
     }
-    Self.deliverOpenFiles([url.path])
-    return true
+    if !url.path.isEmpty { deliverOpenFiles([url.path]) }
   }
 
   private static func deliverOpenFiles(_ paths: [String]) {

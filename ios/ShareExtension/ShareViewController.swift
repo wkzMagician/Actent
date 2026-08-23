@@ -25,20 +25,27 @@ final class ShareViewController: SLComposeServiceViewController {
     for (index, provider) in providers.enumerated() {
       waitGroup.enter()
       let type = provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
-      provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
+      provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
         defer { waitGroup.leave() }
-        guard let url, error == nil, let directory else { return }
+        guard error == nil, let directory else { return }
         let destination = directory.appendingPathComponent(
-          "share-\(UUID().uuidString)-\(index)-\(url.lastPathComponent)"
+          "share-\(UUID().uuidString)-\(index)"
         )
         do {
-          try FileManager.default.copyItem(at: url, to: destination)
+          if let url = item as? URL {
+            try FileManager.default.copyItem(at: url, to: destination)
+          } else if let text = item as? String {
+            try text.write(to: destination, atomically: true, encoding: .utf8)
+          } else if let data = item as? Data {
+            try data.write(to: destination)
+          } else {
+            return
+          }
           lock.lock()
           paths.append(destination.path)
           lock.unlock()
         } catch {
-          // Some providers expose a temporary URL that disappears before the
-          // copy completes. The host app will simply receive fewer files.
+          // The host app will simply receive fewer files.
         }
       }
     }
@@ -46,7 +53,7 @@ final class ShareViewController: SLComposeServiceViewController {
       let encoded = paths
         .map { $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "" }
         .joined(separator: ",")
-      if let url = URL(string: "actent://share?paths=\(encoded)") {
+      if let url = URL(string: "actent://share?paths=\(encoded)"), !paths.isEmpty {
         self.extensionContext?.open(url) { _ in
           self.extensionContext?.completeRequest(returningItems: nil)
         }
