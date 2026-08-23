@@ -50,6 +50,7 @@
   "relaySettingsSaved": "Relay settings saved; restart Actent to reconnect.",
   "restartToReconnect": "Restart Actent to reconnect.",
   "saveFailed": "Save failed: {error}",
+  "workNameAlreadyExists": "A Work with this name already exists on this device.",
   "lanDiscoveryUnavailable": "LAN discovery is unavailable. A VPN/TUN adapter or Windows network configuration may be blocking multicast.",
   "lanNoDevices": "No pairing-enabled devices were found."
   ,"chooseWork": "Choose Work"

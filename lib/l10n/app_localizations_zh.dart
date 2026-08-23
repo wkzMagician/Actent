@@ -164,6 +164,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get workNameAlreadyExists => '此设备上已经存在同名任务。';
+
+  @override
   String get lanDiscoveryUnavailable =>
       '局域网发现不可用。VPN/TUN 网卡或 Windows 网络配置可能阻止了多播。';
 

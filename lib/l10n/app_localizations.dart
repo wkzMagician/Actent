@@ -398,6 +398,12 @@ abstract class AppLocalizations {
   /// **'Save failed: {error}'**
   String saveFailed(Object error);
 
+  /// No description provided for @workNameAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'A Work with this name already exists on this device.'**
+  String get workNameAlreadyExists;
+
   /// No description provided for @lanDiscoveryUnavailable.
   ///
   /// In en, this message translates to:

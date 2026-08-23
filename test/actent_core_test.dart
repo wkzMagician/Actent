@@ -162,6 +162,34 @@ void main() {
       ]);
     });
 
+    test('allows duplicate Work names only across different devices', () async {
+      await repository.saveWork(work);
+
+      await expectLater(
+        repository.saveWork(
+          Work(
+            id: 'work-duplicate',
+            revision: 1,
+            name: '  Store text  ',
+            ownerDeviceId: 'desktop',
+            acceptedContentTypes: const {ActentContentType.text},
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      await repository.saveWork(
+        Work(
+          id: 'work-phone',
+          revision: 1,
+          name: 'Store text',
+          ownerDeviceId: 'phone',
+          acceptedContentTypes: const {ActentContentType.text},
+        ),
+      );
+      expect((await repository.listWorks()).length, 2);
+    });
+
     test(
       'deleting a message removes only its unreferenced attachment files',
       () async {

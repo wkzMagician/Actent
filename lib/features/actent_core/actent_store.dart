@@ -93,8 +93,29 @@ class ActentRepository {
     }
   }
 
-  Future<void> saveWork(Work work) =>
-      store.write(_key('works', work.id), work.toJson());
+  Future<void> saveWork(Work work) async {
+    final normalizedName = _normalizeWorkName(work.name);
+    if (normalizedName.isEmpty) {
+      throw ArgumentError.value(
+        work.name,
+        'name',
+        'Work names cannot be empty.',
+      );
+    }
+    for (final existing in await listWorks()) {
+      if (existing.id == work.id ||
+          existing.ownerDeviceId != work.ownerDeviceId) {
+        continue;
+      }
+      if (_normalizeWorkName(existing.name) == normalizedName) {
+        throw StateError(
+          'A Work named "${work.name}" already exists on device '
+          '${work.ownerDeviceId}.',
+        );
+      }
+    }
+    await store.write(_key('works', work.id), work.toJson());
+  }
 
   Future<Work?> getWork(String id) => _read(_key('works', id), Work.fromJson);
 
@@ -184,4 +205,6 @@ class ActentRepository {
     }
     return '$collection/$id.json';
   }
+
+  String _normalizeWorkName(String name) => name.trim().toLowerCase();
 }

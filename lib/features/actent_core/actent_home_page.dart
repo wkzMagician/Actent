@@ -1041,13 +1041,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
                       dense: true,
                       leading: Text('${index + 1}'),
                       title: Text(
-                        _works
-                            .firstWhere(
-                              (work) => work.id == steps[index].workId,
-                            )
-                            .name,
+                        _workSelectionLabel(
+                          _works.firstWhere(
+                            (work) => work.id == steps[index].workId,
+                          ),
+                          l10n,
+                        ),
                       ),
-                      subtitle: Text(steps[index].deviceId),
                       trailing: IconButton(
                         icon: const Icon(Icons.remove_circle_outline),
                         onPressed: () =>
@@ -1066,7 +1066,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
                               for (final work in candidates)
                                 DropdownMenuItem(
                                   value: work.id,
-                                  child: Text(work.name),
+                                  child: Text(
+                                    _workSelectionLabel(work, l10n),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                             ],
                             onChanged: (value) =>
@@ -1167,6 +1170,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
     return work.ownerDeviceId;
   }
+
+  String _workSelectionLabel(Work work, AppLocalizations l10n) =>
+      '${work.name} — ${_workOwnerLabel(work, l10n)}';
 
   String _workKindLabel(Work work, AppLocalizations l10n) =>
       switch (work.platformBindings['kind']) {
@@ -1270,6 +1276,23 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _addWebJsWork() => _editWebJsWork();
 
+  Future<bool> _trySaveWork(ActentRepository repository, Work work) async {
+    try {
+      await repository.saveWork(work);
+      return true;
+    } on StateError catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.workNameAlreadyExists),
+          ),
+        );
+      }
+      debugPrint('Unable to save Work: $error');
+      return false;
+    }
+  }
+
   Future<void> _addNullWork() async {
     final repository = widget.repository;
     if (repository == null) return;
@@ -1300,7 +1323,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
       },
     );
     if (name == null || name.isEmpty) return;
-    await repository.saveWork(
+    if (!await _trySaveWork(
+      repository,
       Work(
         id: 'null-${DateTime.now().microsecondsSinceEpoch}',
         revision: 1,
@@ -1309,7 +1333,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         acceptedContentTypes: ActentContentType.values.toSet(),
         platformBindings: const {'kind': 'null'},
       ),
-    );
+    )) {
+      return;
+    }
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -1608,7 +1634,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }) async {
     final repository = widget.repository;
     if (repository == null) return;
-    await repository.saveWork(
+    if (!await _trySaveWork(
+      repository,
       Work(
         id: '$idPrefix-${DateTime.now().microsecondsSinceEpoch}',
         revision: 1,
@@ -1617,7 +1644,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         acceptedContentTypes: ActentContentType.values.toSet(),
         platformBindings: bindings,
       ),
-    );
+    )) {
+      return;
+    }
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -1647,29 +1676,37 @@ class _ActentHomePageState extends State<ActentHomePage> {
             : defaultTargetPlatform == TargetPlatform.macOS
             ? 'zsh'
             : 'bash';
+        final dialogWidth = MediaQuery.sizeOf(dialogContext).width - 32;
         return AlertDialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 24,
+          ),
           title: Text(
             existing == null ? l10n.addShellWork : l10n.editShellWork,
           ),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: name,
-                  decoration: InputDecoration(labelText: l10n.name),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('${l10n.shell}: $shell'),
-                ),
-                TextField(
-                  controller: source,
-                  decoration: InputDecoration(labelText: l10n.shellSource),
-                  minLines: 10,
-                  maxLines: 18,
-                ),
-              ],
+            child: SizedBox(
+              width: dialogWidth.clamp(0.0, 720.0).toDouble(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: name,
+                    decoration: InputDecoration(labelText: l10n.name),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('${l10n.shell}: $shell'),
+                  ),
+                  TextField(
+                    controller: source,
+                    decoration: InputDecoration(labelText: l10n.shellSource),
+                    minLines: 10,
+                    maxLines: 18,
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
@@ -1694,7 +1731,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
         : defaultTargetPlatform == TargetPlatform.macOS
         ? 'zsh'
         : 'bash';
-    await repository.saveWork(
+    if (!await _trySaveWork(
+      repository,
       Work(
         id: existing?.id ?? 'shell-${DateTime.now().microsecondsSinceEpoch}',
         revision: (existing?.revision ?? 0) + 1,
@@ -1711,7 +1749,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         },
         catalogVisibility: existing?.catalogVisibility ?? const {},
       ),
-    );
+    )) {
+      return;
+    }
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -1777,7 +1817,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (values == null || values.$1.isEmpty || values.$2.isEmpty) return;
     final repository = widget.repository;
     if (repository == null) return;
-    await repository.saveWork(
+    if (!await _trySaveWork(
+      repository,
       Work(
         id: existing?.id ?? 'file-${DateTime.now().microsecondsSinceEpoch}',
         revision: (existing?.revision ?? 0) + 1,
@@ -1790,7 +1831,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         platformBindings: {'kind': 'desktop-file', 'path': values.$2},
         catalogVisibility: existing?.catalogVisibility ?? const {},
       ),
-    );
+    )) {
+      return;
+    }
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -1825,7 +1868,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (name == null || name.isEmpty) return;
     final repository = widget.repository;
     if (repository == null) return;
-    await repository.saveWork(
+    if (!await _trySaveWork(
+      repository,
       Work(
         id: existing.id,
         revision: existing.revision + 1,
@@ -1839,7 +1883,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
         platformBindings: existing.platformBindings,
         catalogVisibility: existing.catalogVisibility,
       ),
-    );
+    )) {
+      return;
+    }
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -1932,7 +1978,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     );
     final repository = widget.repository;
     if (repository == null) return;
-    await repository.saveWork(work);
+    if (!await _trySaveWork(repository, work)) return;
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -2036,7 +2082,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       ).showSnackBar(SnackBar(content: Text('Work validation failed: $error')));
       return;
     }
-    await repository.saveWork(work);
+    if (!await _trySaveWork(repository, work)) return;
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }

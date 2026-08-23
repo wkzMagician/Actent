@@ -50,6 +50,7 @@
   "relaySettingsSaved": "Relay 设置已保存；重启 Actent 后重新连接。",
   "restartToReconnect": "重启 Actent 后重新连接。",
   "saveFailed": "保存失败：{error}",
+  "workNameAlreadyExists": "此设备上已经存在同名任务。",
   "lanDiscoveryUnavailable": "局域网发现不可用。VPN/TUN 网卡或 Windows 网络配置可能阻止了多播。",
   "lanNoDevices": "没有发现可配对的设备。"
   ,"chooseWork": "选择任务"

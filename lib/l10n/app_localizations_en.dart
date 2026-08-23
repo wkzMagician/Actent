@@ -175,6 +175,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get workNameAlreadyExists =>
+      'A Work with this name already exists on this device.';
+
+  @override
   String get lanDiscoveryUnavailable =>
       'LAN discovery is unavailable. A VPN/TUN adapter or Windows network configuration may be blocking multicast.';
 
