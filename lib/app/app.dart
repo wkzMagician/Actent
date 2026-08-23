@@ -46,6 +46,8 @@ class DartloomApp extends StatefulWidget {
     this.importWorkInputFiles,
     this.initialFilePaths = const [],
     this.externalFilePaths,
+    this.peerConnectionStatuses,
+    this.probePeerConnections,
     this.locale,
     this.onLocaleChanged,
   });
@@ -80,6 +82,8 @@ class DartloomApp extends StatefulWidget {
   importWorkInputFiles;
   final List<String> initialFilePaths;
   final Stream<List<String>>? externalFilePaths;
+  final Stream<PeerConnectionStatus>? peerConnectionStatuses;
+  final Future<void> Function()? probePeerConnections;
   final Locale? locale;
   final Future<void> Function(Locale locale)? onLocaleChanged;
 
@@ -135,6 +139,8 @@ class _DartloomAppState extends State<DartloomApp> {
       importWorkInputFiles: widget.importWorkInputFiles,
       initialFilePaths: widget.initialFilePaths,
       externalFilePaths: widget.externalFilePaths,
+      peerConnectionStatuses: widget.peerConnectionStatuses,
+      probePeerConnections: widget.probePeerConnections,
       onLocaleChanged: _changeLocale,
       canEditWorks:
           kIsWeb ||

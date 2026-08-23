@@ -54,7 +54,11 @@
   "lanDiscoveryUnavailable": "局域网发现不可用。VPN/TUN 网卡或 Windows 网络配置可能阻止了多播。",
   "lanNoDevices": "没有发现可配对的设备。"
   ,"chooseWork": "选择任务"
+  ,"chooseWorkOrWorkflow": "选择任务或工作流"
   ,"chooseWorkDescription": "选择要处理这条共享内容的任务。"
+  ,"deviceConnected": "已连接"
+  ,"deviceDisconnected": "未连接"
+  ,"deviceConnectionChecking": "正在检查连接"
   ,"thisDevice": "本设备"
   ,"remoteDevice": "远程设备"
   ,"nullWork": "空任务 — 保存在本地"

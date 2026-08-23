@@ -54,7 +54,11 @@
   "lanDiscoveryUnavailable": "LAN discovery is unavailable. A VPN/TUN adapter or Windows network configuration may be blocking multicast.",
   "lanNoDevices": "No pairing-enabled devices were found."
   ,"chooseWork": "Choose Work"
+  ,"chooseWorkOrWorkflow": "Choose Work or Workflow"
   ,"chooseWorkDescription": "Select where this shared content should go."
+  ,"deviceConnected": "Connected"
+  ,"deviceDisconnected": "Not connected"
+  ,"deviceConnectionChecking": "Checking connection"
   ,"thisDevice": "This device"
   ,"remoteDevice": "Remote device"
   ,"nullWork": "Null — store locally"

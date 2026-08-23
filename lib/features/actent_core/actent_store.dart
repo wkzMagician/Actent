@@ -123,6 +123,16 @@ class ActentRepository {
 
   Future<void> deleteWork(String id) => store.delete(_key('works', id));
 
+  Future<void> deleteOwnedWork(String id) async {
+    await store.write(_key('workDeletions', id), <String, Object?>{
+      'deletedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    await deleteWork(id);
+  }
+
+  Future<bool> wasOwnedWorkDeleted(String id) async =>
+      await store.read(_key('workDeletions', id)) != null;
+
   Future<void> saveWorkflow(Workflow workflow) =>
       store.write(_key('workflows', workflow.id), workflow.toJson());
 

@@ -27,9 +27,14 @@ import UIKit
       binaryMessenger: registrar.messenger()
     )
     Self.openFilesChannel = channel
-    if !Self.pendingOpenFiles.isEmpty {
-      channel.invokeMethod("openFiles", arguments: Self.pendingOpenFiles)
+    channel.setMethodCallHandler { call, result in
+      guard call.method == "takePendingOpenFiles" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let pending = Self.pendingOpenFiles
       Self.pendingOpenFiles.removeAll()
+      result(pending)
     }
     let workChannel = FlutterMethodChannel(
       name: "actent/ios_work",
@@ -73,10 +78,18 @@ import UIKit
 
   static func handleIncomingURL(_ url: URL) {
     if url.scheme == "actent",
-       url.host == "share",
-       let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
-        .queryItems?.first(where: { $0.name == "paths" })?.value {
-      let paths = value.split(separator: ",").map(String.init)
+       url.host == "share" {
+      let queryItems = URLComponents(
+        url: url,
+        resolvingAgainstBaseURL: false
+      )?.queryItems ?? []
+      var paths = queryItems
+        .filter { $0.name == "path" }
+        .compactMap(\.value)
+      if paths.isEmpty,
+         let legacy = queryItems.first(where: { $0.name == "paths" })?.value {
+        paths = legacy.split(separator: ",").map(String.init)
+      }
       if !paths.isEmpty { deliverOpenFiles(paths) }
       return
     }
@@ -84,12 +97,17 @@ import UIKit
   }
 
   private static func deliverOpenFiles(_ paths: [String]) {
-    if let channel = openFilesChannel {
-      DispatchQueue.main.async {
-        channel.invokeMethod("openFiles", arguments: paths)
+    DispatchQueue.main.async {
+      Self.pendingOpenFiles.append(contentsOf: paths)
+      guard let channel = Self.openFilesChannel else { return }
+      let batch = Self.pendingOpenFiles
+      channel.invokeMethod("openFiles", arguments: batch) { response in
+        guard response as? Bool == true,
+              Array(Self.pendingOpenFiles.prefix(batch.count)) == batch else {
+          return
+        }
+        Self.pendingOpenFiles.removeFirst(batch.count)
       }
-    } else {
-      pendingOpenFiles.append(contentsOf: paths)
     }
   }
 }

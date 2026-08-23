@@ -422,11 +422,35 @@ abstract class AppLocalizations {
   /// **'Choose Work'**
   String get chooseWork;
 
+  /// No description provided for @chooseWorkOrWorkflow.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose Work or Workflow'**
+  String get chooseWorkOrWorkflow;
+
   /// No description provided for @chooseWorkDescription.
   ///
   /// In en, this message translates to:
   /// **'Select where this shared content should go.'**
   String get chooseWorkDescription;
+
+  /// No description provided for @deviceConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get deviceConnected;
+
+  /// No description provided for @deviceDisconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get deviceDisconnected;
+
+  /// No description provided for @deviceConnectionChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking connection'**
+  String get deviceConnectionChecking;
 
   /// No description provided for @thisDevice.
   ///

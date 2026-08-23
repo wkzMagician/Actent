@@ -43,6 +43,28 @@ Future<ActentMessage?> _importFiles(
   final timestamp = DateTime.now().toUtc();
   final identity = timestamp.microsecondsSinceEpoch.toRadixString(36);
   final messageId = 'file-$identity';
+  if (files.length == 1 &&
+      (files.single.name.endsWith('.actent-text') ||
+          files.single.name.endsWith('.actent-url'))) {
+    final value = (await File(files.single.path).readAsString()).trim();
+    if (value.isEmpty) return null;
+    final isUrl = files.single.name.endsWith('.actent-url');
+    return ActentMessage(
+      id: messageId,
+      traceId: messageId,
+      createdAt: timestamp,
+      source: ActentSource(
+        kind: 'share',
+        deviceId: deviceId,
+        appName: 'iOS Share Extension',
+        platform: Platform.operatingSystem,
+      ),
+      content: ActentContent(
+        type: isUrl ? ActentContentType.url : ActentContentType.text,
+        data: {isUrl ? 'url' : 'text': value},
+      ),
+    );
+  }
   final attachments = <ActentAttachment>[];
   for (var index = 0; index < files.length; index++) {
     final file = files[index];

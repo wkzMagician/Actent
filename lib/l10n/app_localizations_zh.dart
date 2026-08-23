@@ -177,7 +177,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseWork => '选择任务';
 
   @override
+  String get chooseWorkOrWorkflow => '选择任务或工作流';
+
+  @override
   String get chooseWorkDescription => '选择要处理这条共享内容的任务。';
+
+  @override
+  String get deviceConnected => '已连接';
+
+  @override
+  String get deviceDisconnected => '未连接';
+
+  @override
+  String get deviceConnectionChecking => '正在检查连接';
 
   @override
   String get thisDevice => '本设备';

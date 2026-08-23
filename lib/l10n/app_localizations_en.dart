@@ -189,8 +189,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chooseWork => 'Choose Work';
 
   @override
+  String get chooseWorkOrWorkflow => 'Choose Work or Workflow';
+
+  @override
   String get chooseWorkDescription =>
       'Select where this shared content should go.';
+
+  @override
+  String get deviceConnected => 'Connected';
+
+  @override
+  String get deviceDisconnected => 'Not connected';
+
+  @override
+  String get deviceConnectionChecking => 'Checking connection';
 
   @override
   String get thisDevice => 'This device';

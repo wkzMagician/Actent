@@ -78,16 +78,34 @@ Future<void> _disposeStartupResources({
 Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
   final singleInstance = createSingleInstanceService();
   final externalFilePaths = StreamController<List<String>>.broadcast();
+  final startupFilePaths = List<String>.from(initialFilePaths);
+  var externalFileListenerReady = false;
   if (defaultTargetPlatform == TargetPlatform.macOS ||
       defaultTargetPlatform == TargetPlatform.iOS) {
     const openFilesChannel = MethodChannel('actent/open_files');
     openFilesChannel.setMethodCallHandler((call) async {
-      if (call.method != 'openFiles') return;
+      if (call.method != 'openFiles') return false;
       final values = call.arguments;
       if (values is List) {
-        externalFilePaths.add(values.whereType<String>().toList());
+        final paths = values.whereType<String>().toList();
+        if (externalFileListenerReady) {
+          externalFilePaths.add(paths);
+        } else {
+          startupFilePaths.addAll(paths);
+        }
       }
+      return true;
     });
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      try {
+        final pending = await openFilesChannel.invokeListMethod<String>(
+          'takePendingOpenFiles',
+        );
+        if (pending != null) startupFilePaths.addAll(pending);
+      } on MissingPluginException {
+        // Older native builds do not expose the cold-start handoff yet.
+      }
+    }
   }
   ObjectStore? objectStore;
   ActentTransportService? transport;
@@ -265,6 +283,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
         _ => null,
       },
       importWorkInputFiles: switch (defaultTargetPlatform) {
+        TargetPlatform.iOS ||
         TargetPlatform.windows ||
         TargetPlatform.linux ||
         TargetPlatform.macOS => (paths) => importLocalWorkInputFiles(
@@ -274,13 +293,16 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
         ),
         _ => null,
       },
-      initialFilePaths: initialFilePaths,
+      initialFilePaths: startupFilePaths,
       externalFilePaths: externalFilePaths.stream,
+      peerConnectionStatuses: transport.peerConnectionStatuses,
+      probePeerConnections: transport.probePeers,
       desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
       shareBridge: defaultTargetPlatform == TargetPlatform.android
           ? AndroidShareBridge()
           : null,
     );
+    externalFileListenerReady = true;
     await singleInstance?.configure(
       SingleInstanceConfiguration(
         onArgs: (args) async => externalFilePaths.add(args),

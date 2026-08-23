@@ -55,6 +55,8 @@ class ActentHomePage extends StatefulWidget {
     this.importWorkInputFiles,
     this.initialFilePaths = const [],
     this.externalFilePaths,
+    this.peerConnectionStatuses,
+    this.probePeerConnections,
     this.showPairingQr,
     this.scanPairingQr,
     this.onLocaleChanged,
@@ -91,6 +93,8 @@ class ActentHomePage extends StatefulWidget {
   importWorkInputFiles;
   final List<String> initialFilePaths;
   final Stream<List<String>>? externalFilePaths;
+  final Stream<PeerConnectionStatus>? peerConnectionStatuses;
+  final Future<void> Function()? probePeerConnections;
   final Future<void> Function(BuildContext context, String invite)?
   showPairingQr;
   final Future<String?> Function(BuildContext context)? scanPairingQr;
@@ -108,11 +112,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<WorkflowExecution> _workflowExecutions = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
+  final Map<String, PeerConnectionStatus> _peerConnectionStatusByDevice = {};
   String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ActentMessage>? _shareSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
   StreamSubscription<List<String>>? _externalFileSubscription;
+  StreamSubscription<PeerConnectionStatus>? _peerConnectionSubscription;
   StreamSubscription<void>? _repositoryUpdateSubscription;
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
@@ -178,6 +184,16 @@ class _ActentHomePageState extends State<ActentHomePage> {
     _externalFileSubscription = widget.externalFilePaths?.listen(
       _importExternalFiles,
     );
+    final probePeerConnections = widget.probePeerConnections;
+    if (probePeerConnections != null) {
+      unawaited(Future<void>.delayed(Duration.zero, probePeerConnections));
+    }
+    _peerConnectionSubscription = widget.peerConnectionStatuses?.listen((
+      status,
+    ) {
+      if (!mounted) return;
+      setState(() => _peerConnectionStatusByDevice[status.deviceId] = status);
+    });
   }
 
   Future<void> _loadRepositoryData(ActentRepository repository) async {
@@ -192,7 +208,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final existingNull = works
         .where((work) => work.id == localNullId)
         .firstOrNull;
-    if (existingNull == null) {
+    if (existingNull == null &&
+        !await repository.wasOwnedWorkDeleted(localNullId)) {
       final nullWork = Work.nullWork(
         id: localNullId,
         ownerDeviceId: localDeviceId,
@@ -201,7 +218,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await repository.saveWork(nullWork);
       works = [...works, nullWork];
       localCatalogChanged = true;
-    } else if (existingNull.name == 'Null' &&
+    } else if (existingNull != null &&
+        existingNull.name == 'Null' &&
         existingNull.name != l10n.nullWork) {
       final renamedNull = Work(
         id: existingNull.id,
@@ -223,7 +241,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
       localCatalogChanged = true;
     }
     if (widget.shareBridge != null &&
-        !works.any((work) => work.id == 'android-share')) {
+        !works.any((work) => work.id == 'android-share') &&
+        !await repository.wasOwnedWorkDeleted('android-share')) {
       final shareWork = Work(
         id: 'android-share',
         revision: 1,
@@ -387,6 +406,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     _shareSubscription?.cancel();
     _pairingAcceptanceSubscription?.cancel();
     _externalFileSubscription?.cancel();
+    _peerConnectionSubscription?.cancel();
     _repositoryUpdateSubscription?.cancel();
     unawaited(_closeLanPairing());
     super.dispose();
@@ -404,39 +424,55 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _showWorkPicker(ActentMessage message) async {
     final l10n = AppLocalizations.of(context)!;
-    final work = await showModalBottomSheet<Work>(
+    final availableWorks = _works
+        .where((work) => work.accepts(message) && _isSelectableWork(work))
+        .toList(growable: false);
+    final workById = {for (final work in _works) work.id: work};
+    final availableWorkflows = _workflows
+        .where((workflow) {
+          if (!workflow.enabled || workflow.steps.isEmpty) return false;
+          final first = workById[workflow.steps.first.workId];
+          return first != null &&
+              first.accepts(message) &&
+              _isSelectableWork(first);
+        })
+        .toList(growable: false);
+    final target = await showModalBottomSheet<_SharedContentTarget>(
       context: context,
       builder: (context) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           children: [
             ListTile(
-              title: Text(l10n.chooseWork),
+              title: Text(l10n.chooseWorkOrWorkflow),
               subtitle: Text(l10n.chooseWorkDescription),
             ),
-            for (final availableWork in _works.where(
-              (availableWork) =>
-                  availableWork.accepts(message) &&
-                  _isSelectableWork(availableWork),
-            ))
+            if (availableWorks.isNotEmpty)
+              ListTile(dense: true, title: Text(l10n.works)),
+            for (final availableWork in availableWorks)
               ListTile(
                 leading: const Icon(Icons.play_arrow_outlined),
                 title: Text(availableWork.name),
                 subtitle: Text(
                   '${availableWork.ownerDeviceId == (widget.deviceId ?? 'local-device') ? l10n.thisDevice : l10n.remoteDevice} · revision ${availableWork.revision}',
                 ),
-                onTap: () => Navigator.of(context).pop(availableWork),
+                onTap: () =>
+                    Navigator.of(context)
+                        .pop(_SharedContentTarget.work(availableWork)),
               ),
-            ListTile(
-              leading: const Icon(Icons.archive_outlined),
-              title: Text(l10n.nullWork),
-              onTap: () => Navigator.of(context).pop(
-                Work.nullWork(
-                  id: 'local-null',
-                  ownerDeviceId: widget.deviceId ?? 'local-device',
+            if (availableWorkflows.isNotEmpty)
+              ListTile(dense: true, title: Text(l10n.workflows)),
+            for (final workflow in availableWorkflows)
+              ListTile(
+                leading: const Icon(Icons.account_tree_outlined),
+                title: Text(workflow.name),
+                subtitle: Text(
+                  '${workflow.steps.length} ${l10n.workflowSteps}',
                 ),
+                onTap: () =>
+                    Navigator.of(context)
+                        .pop(_SharedContentTarget.workflow(workflow)),
               ),
-            ),
             ListTile(
               leading: const Icon(Icons.close),
               title: Text(l10n.discard),
@@ -446,8 +482,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ),
       ),
     );
-    if (work == null || !mounted) return;
-    await _routeMessageToWork(message, work);
+    if (target == null || !mounted) return;
+    final work = target.work;
+    if (work != null) {
+      await _routeMessageToWork(message, work);
+      return;
+    }
+    final workflow = target.workflow;
+    if (workflow != null) await _runWorkflowWithMessage(workflow, message);
   }
 
   Future<void> _showMessagePicker(Work work) async {
@@ -482,7 +524,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<ActentContentType?> _showInputTypePicker(Work work) async {
     final l10n = AppLocalizations.of(context)!;
-    final types = work.acceptedContentTypes.toList()
+    final normalized = work.acceptedContentTypes.toSet();
+    if (normalized.contains(ActentContentType.text)) {
+      normalized.remove(ActentContentType.none);
+    }
+    final types = normalized.toList()
       ..sort((left, right) => left.index.compareTo(right.index));
     return showModalBottomSheet<ActentContentType>(
       context: context,
@@ -856,11 +902,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
                                     work.enabled ? l10n.disable : l10n.enable,
                                   ),
                                 ),
-                                if (!_isBuiltInWork(work))
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Text(l10n.delete),
-                                  ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Text(l10n.delete),
+                                ),
                               ],
                             )
                           : null,
@@ -982,6 +1027,15 @@ class _ActentHomePageState extends State<ActentHomePage> {
       message = await _showManualInputDialog(inputType);
     }
     if (message == null || !mounted || !first.accepts(message)) return;
+    await _runWorkflowWithMessage(workflow, message);
+  }
+
+  Future<void> _runWorkflowWithMessage(
+    Workflow workflow,
+    ActentMessage message,
+  ) async {
+    final router = widget.router;
+    if (router == null || workflow.steps.isEmpty) return;
     final repository = widget.repository;
     if (repository == null) return;
     final l10n = AppLocalizations.of(context)!;
@@ -1154,10 +1208,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   bool _isLocalWork(Work work) =>
       work.ownerDeviceId == (widget.deviceId ?? 'local-device');
-
-  bool _isBuiltInWork(Work work) =>
-      work.id == 'android-share' ||
-      work.id == 'null-${widget.deviceId ?? 'local-device'}';
 
   bool _canEditWork(Work work) => switch (work.platformBindings['kind']) {
     'null' => true,
@@ -2146,7 +2196,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         }
       }
     }
-    await repository.deleteWork(work.id);
+    await repository.deleteOwnedWork(work.id);
     await _publishCatalogChanges();
     await _loadRepositoryData(repository);
   }
@@ -2173,23 +2223,36 @@ class _ActentHomePageState extends State<ActentHomePage> {
             children: [
               _pairingImportButton(),
               const SizedBox(height: 8),
-              for (final device in _devices)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.devices_outlined),
-                    title: Text(_deviceLabel(device, l10n)),
-                    subtitle: Text(
-                      '${device.platform} · ${_shortDeviceId(device.id)}',
-                    ),
-                    trailing: Icon(
-                      device.authorized ? Icons.verified_outlined : Icons.block,
-                      color: device.authorized ? Colors.green : Colors.red,
-                    ),
-                    onTap: () => _unpairDevice(device),
-                  ),
-                ),
+              for (final device in _devices) _deviceCard(device, l10n),
             ],
           );
+  }
+
+  Widget _deviceCard(Device device, AppLocalizations l10n) {
+    final status = _peerConnectionStatusByDevice[device.id];
+    final connected = status?.state == PeerConnectionState.connected;
+    final statusLabel = status == null
+        ? l10n.deviceConnectionChecking
+        : connected
+        ? l10n.deviceConnected
+        : l10n.deviceDisconnected;
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          connected ? Icons.link : Icons.link_off,
+          color: connected ? Colors.green : Colors.grey,
+        ),
+        title: Text(_deviceLabel(device, l10n)),
+        subtitle: Text(
+          '$statusLabel · ${device.platform} · ${_shortDeviceId(device.id)}',
+        ),
+        trailing: Icon(
+          device.authorized ? Icons.verified_outlined : Icons.block,
+          color: device.authorized ? Colors.green : Colors.red,
+        ),
+        onTap: () => _unpairDevice(device),
+      ),
+    );
   }
 
   String _deviceLabel(Device device, AppLocalizations l10n) {
@@ -3201,6 +3264,17 @@ class _ActentPageData {
   final String title;
   final IconData icon;
   final String message;
+}
+
+class _SharedContentTarget {
+  const _SharedContentTarget._({this.work, this.workflow});
+
+  const _SharedContentTarget.work(Work value) : this._(work: value);
+
+  const _SharedContentTarget.workflow(Workflow value) : this._(workflow: value);
+
+  final Work? work;
+  final Workflow? workflow;
 }
 
 enum _ActivityStatus {

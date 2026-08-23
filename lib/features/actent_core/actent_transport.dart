@@ -18,6 +18,20 @@ import 'actent_router.dart';
 import 'actent_store.dart';
 import 'secret_repository.dart';
 
+enum PeerConnectionState { connected, disconnected }
+
+class PeerConnectionStatus {
+  const PeerConnectionStatus({
+    required this.deviceId,
+    required this.state,
+    this.lastSeen,
+  });
+
+  final String deviceId;
+  final PeerConnectionState state;
+  final DateTime? lastSeen;
+}
+
 /// Settings shared by the relay publisher and the local subscription.
 /// Authentication is intentionally kept outside the JSON repository.
 class ActentRelaySettings {
@@ -73,6 +87,8 @@ class ActentTransportService implements MessageConnection {
     this.subscriptionFor,
     this.readAttachment,
     this.writeAttachment,
+    this.presenceInterval = const Duration(seconds: 30),
+    this.presenceTimeout = const Duration(seconds: 75),
   }) : _seenPackets =
            seenPackets ?? SeenPacketStore(retention: seenPacketRetention);
 
@@ -100,17 +116,25 @@ class ActentTransportService implements MessageConnection {
   )?
   writeAttachment;
   final SeenPacketStore _seenPackets;
+  final Duration presenceInterval;
+  final Duration presenceTimeout;
+  final StreamController<PeerConnectionStatus> _peerConnectionStatuses =
+      StreamController<PeerConnectionStatus>.broadcast();
+  final Map<String, PeerConnectionStatus> _peerStatuses = {};
 
   ActentRouter? _router;
   StreamSubscription<MessagingPacket>? _subscription;
   LanTlsPacketServer? _lanServer;
   bool _started = false;
+  Timer? _presenceTimer;
   final Map<String, _IncomingAttachmentTransfer> _incomingTransfers = {};
   final Map<String, Completer<Map<String, Set<int>>>> _resumeWaiters = {};
 
   String? get lanHost => lanServerConfig?.host;
   int? get lanPort => _lanServer?.boundPort;
   String? get lanCertificateSha256 => lanServerConfig?.certificateSha256;
+  Stream<PeerConnectionStatus> get peerConnectionStatuses =>
+      _peerConnectionStatuses.stream;
 
   Future<void> start(ActentRouter router) async {
     if (_started) return;
@@ -151,6 +175,10 @@ class ActentTransportService implements MessageConnection {
         },
       );
       _started = true;
+      _presenceTimer = Timer.periodic(
+        presenceInterval,
+        (_) => unawaited(probePeers()),
+      );
     } on Object {
       await _lanServer?.close();
       _lanServer = null;
@@ -266,9 +294,17 @@ class ActentTransportService implements MessageConnection {
         packet,
         expectedSenderId: packet.senderId,
       );
+      _markPeerConnected(packet.senderId);
       final router = _router;
       if (router == null) return;
       switch (payload['type']) {
+        case 'presencePing':
+          await _sendTransportPayload(packet.senderId, {
+            'type': 'presencePong',
+            'schemaVersion': actentSchemaVersion,
+          });
+        case 'presencePong':
+          break;
         case 'catalogSnapshot':
           await router.receiveCatalogSnapshot(
             payload['catalog'],
@@ -315,6 +351,61 @@ class ActentTransportService implements MessageConnection {
   /// on the transport means the listener never needs to understand Actent
   /// payloads or its authorization rules.
   Future<void> receivePacket(MessagingPacket packet) => _receive(packet);
+
+  Future<void> probePeers() async {
+    if (!_started) return;
+    final now = DateTime.now().toUtc();
+    final peers = (await repository.listDevices()).where(
+      (device) => device.authorized && device.id != deviceId,
+    );
+    for (final peer in peers) {
+      final current = _peerStatuses[peer.id];
+      final lastSeen = current?.lastSeen;
+      if (current == null ||
+          (lastSeen != null && now.difference(lastSeen) > presenceTimeout)) {
+        _setPeerStatus(
+          PeerConnectionStatus(
+            deviceId: peer.id,
+            state: PeerConnectionState.disconnected,
+            lastSeen: lastSeen,
+          ),
+        );
+      }
+      try {
+        await _sendTransportPayload(peer.id, {
+          'type': 'presencePing',
+          'schemaVersion': actentSchemaVersion,
+        });
+      } on Object {
+        _setPeerStatus(
+          PeerConnectionStatus(
+            deviceId: peer.id,
+            state: PeerConnectionState.disconnected,
+            lastSeen: lastSeen,
+          ),
+        );
+      }
+    }
+  }
+
+  void _markPeerConnected(String peerDeviceId) {
+    _setPeerStatus(
+      PeerConnectionStatus(
+        deviceId: peerDeviceId,
+        state: PeerConnectionState.connected,
+        lastSeen: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  void _setPeerStatus(PeerConnectionStatus status) {
+    final previous = _peerStatuses[status.deviceId];
+    _peerStatuses[status.deviceId] = status;
+    if (previous?.state != status.state ||
+        previous?.lastSeen != status.lastSeen) {
+      _peerConnectionStatuses.add(status);
+    }
+  }
 
   Future<_PreparedAttachmentPayload> _prepareStreamingPayload(
     Map<String, Object?> payload,
@@ -653,6 +744,8 @@ class ActentTransportService implements MessageConnection {
   }
 
   Future<void> stop() async {
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
     await _subscription?.cancel();
     _subscription = null;
     await _lanServer?.close();

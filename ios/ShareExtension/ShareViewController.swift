@@ -24,23 +24,70 @@ final class ShareViewController: SLComposeServiceViewController {
     let lock = NSLock()
     for (index, provider) in providers.enumerated() {
       waitGroup.enter()
-      let type = provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
-      provider.loadItem(forTypeIdentifier: type, options: nil) { item, error in
-        defer { waitGroup.leave() }
-        guard error == nil, let directory else { return }
-        let destination = directory.appendingPathComponent(
-          "share-\(UUID().uuidString)-\(index)"
-        )
-        do {
-          if let url = item as? URL {
-            try FileManager.default.copyItem(at: url, to: destination)
-          } else if let text = item as? String {
-            try text.write(to: destination, atomically: true, encoding: .utf8)
-          } else if let data = item as? Data {
-            try data.write(to: destination)
-          } else {
+      let finish: (URL?) -> Void = { destination in
+        if let destination {
+          lock.lock()
+          paths.append(destination.path)
+          lock.unlock()
+        }
+        waitGroup.leave()
+      }
+      if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+        provider.loadItem(
+          forTypeIdentifier: UTType.plainText.identifier,
+          options: nil
+        ) { item, error in
+          guard error == nil,
+                let text = item as? String,
+                let directory else {
+            finish(nil)
             return
           }
+          let destination = directory.appendingPathComponent(
+            "share-\(UUID().uuidString)-\(index).actent-text"
+          )
+          do {
+            try text.write(to: destination, atomically: true, encoding: .utf8)
+            finish(destination)
+          } catch {
+            finish(nil)
+          }
+        }
+        continue
+      }
+      if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
+        provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) {
+          item, error in
+          let sharedURL = (item as? URL) ?? (item as? NSURL).map { $0 as URL }
+          guard error == nil, let sharedURL, let directory else {
+            finish(nil)
+            return
+          }
+          let destination = directory.appendingPathComponent(
+            "share-\(UUID().uuidString)-\(index).actent-url"
+          )
+          do {
+            try sharedURL.absoluteString.write(
+              to: destination,
+              atomically: true,
+              encoding: .utf8
+            )
+            finish(destination)
+          } catch {
+            finish(nil)
+          }
+        }
+        continue
+      }
+      let type = provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
+      provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
+        defer { waitGroup.leave() }
+        guard let url, error == nil, let directory else { return }
+        let destination = directory.appendingPathComponent(
+          "share-\(UUID().uuidString)-\(index)-\(url.lastPathComponent)"
+        )
+        do {
+          try FileManager.default.copyItem(at: url, to: destination)
           lock.lock()
           paths.append(destination.path)
           lock.unlock()
@@ -50,10 +97,11 @@ final class ShareViewController: SLComposeServiceViewController {
       }
     }
     waitGroup.notify(queue: .main) {
-      let encoded = paths
-        .map { $0.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "" }
-        .joined(separator: ",")
-      if let url = URL(string: "actent://share?paths=\(encoded)"), !paths.isEmpty {
+      var components = URLComponents()
+      components.scheme = "actent"
+      components.host = "share"
+      components.queryItems = paths.map { URLQueryItem(name: "path", value: $0) }
+      if let url = components.url, !paths.isEmpty {
         self.extensionContext?.open(url) { _ in
           self.extensionContext?.completeRequest(returningItems: nil)
         }

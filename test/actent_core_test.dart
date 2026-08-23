@@ -190,6 +190,15 @@ void main() {
       expect((await repository.listWorks()).length, 2);
     });
 
+    test('remembers an owned Work deletion across startup repair', () async {
+      await repository.saveWork(work);
+
+      await repository.deleteOwnedWork(work.id);
+
+      expect(await repository.getWork(work.id), isNull);
+      expect(await repository.wasOwnedWorkDeleted(work.id), isTrue);
+    });
+
     test(
       'deleting a message removes only its unreferenced attachment files',
       () async {
