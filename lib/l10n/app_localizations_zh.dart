@@ -91,7 +91,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get relayServer => 'Relay 服务器';
 
   @override
-  String get authorizationConfigured => '已配置授权';
+  String get authorizationConfigured => '已配置 Token';
 
   @override
   String get attachmentRetention => '附件保留';
@@ -141,7 +141,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ntfyServerUrl => 'ntfy 服务器 URL';
 
   @override
-  String get authorizationEmptyToClear => '授权（留空可清除）';
+  String get authorizationEmptyToClear => 'ntfy Token（tk_...，留空可清除）';
 
   @override
   String get cancel => '取消';

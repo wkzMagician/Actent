@@ -13,6 +13,8 @@ void main() {
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'temporary-topic',
+      issuerControlTopic: 'desktop-control',
+      issuerBlobTopic: 'desktop-blob',
       issuerLanHost: '192.168.1.10',
       issuerLanPort: 43100,
       issuerPairingLanPort: 43101,
@@ -40,6 +42,8 @@ void main() {
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'temporary-topic',
+      issuerControlTopic: 'desktop-control',
+      issuerBlobTopic: 'desktop-blob',
     );
 
     session.accept(remoteDeviceId: 'phone', remotePublicKey: 'phone-key');
@@ -61,6 +65,8 @@ void main() {
       issuerPublicKey: 'public-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'temporary-topic',
+      issuerControlTopic: 'desktop-control',
+      issuerBlobTopic: 'desktop-blob',
       lifetime: const Duration(minutes: 10),
     );
     now = now.add(const Duration(minutes: 11));
@@ -89,7 +95,8 @@ void main() {
       issuerPublicKey: 'desktop-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'temporary-topic',
-      issuerRelayTopic: 'desktop-topic',
+      issuerControlTopic: 'desktop-control',
+      issuerBlobTopic: 'desktop-blob',
     );
     final acceptance = PairingAcceptance(
       nonce: session.invite.nonce,
@@ -99,7 +106,8 @@ void main() {
       displayName: 'Phone',
       platform: 'android',
       relayUrl: 'https://ntfy.example',
-      relayTopic: 'phone-topic',
+      controlTopic: 'phone-control',
+      blobTopic: 'phone-blob',
       proof: pairingProof(
         nonce: session.invite.nonce,
         shortCode: session.invite.shortCode,
@@ -110,12 +118,21 @@ void main() {
     );
     final decoded = PairingAcceptance.fromJson(acceptance.toJson());
     expect(decoded.verify(session.invite), isTrue);
+    expect(
+      PairingAcceptance.fromJson(<String, Object?>{
+        ...acceptance.toJson(),
+        'relayUrl': 'https://other-relay.example',
+      }).verify(session.invite),
+      isFalse,
+    );
     final other = coordinator.createInvite(
       uriScheme: 'actent',
       issuerDeviceId: 'other',
       issuerPublicKey: 'other-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'other-topic',
+      issuerControlTopic: 'other-control',
+      issuerBlobTopic: 'other-blob',
     );
     expect(decoded.verify(other.invite), isFalse);
   });
@@ -128,6 +145,8 @@ void main() {
       issuerPublicKey: 'desktop-key',
       relayUrl: 'https://ntfy.example',
       temporaryTopic: 'temporary-topic',
+      issuerControlTopic: 'desktop-control',
+      issuerBlobTopic: 'desktop-blob',
     );
     PairingAcceptance? accepted;
     final handler = LanPairingRequestHandler(
@@ -157,7 +176,8 @@ void main() {
       displayName: 'Phone',
       platform: 'android',
       relayUrl: 'https://ntfy.example',
-      relayTopic: 'phone-topic',
+      controlTopic: 'phone-control',
+      blobTopic: 'phone-blob',
       proof: pairingProof(
         nonce: session.invite.nonce,
         shortCode: session.invite.shortCode,

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:actent/features/actent_core/actent_models.dart';
 import 'package:actent/features/work/android/android_work_runner.dart';
@@ -115,5 +117,20 @@ void main() {
     final config = DesktopShellBinding.fromWork(work).toConfig(work);
     expect(config.arguments, contains('-EncodedCommand'));
     expect(config.arguments, contains('-NoProfile'));
+
+    final encodedCommand =
+        config.arguments[config.arguments.indexOf('-EncodedCommand') + 1];
+    final commandBytes = base64Decode(encodedCommand);
+    final command = String.fromCharCodes(
+      List<int>.generate(
+        commandBytes.length ~/ 2,
+        (index) => commandBytes[index * 2] | (commandBytes[index * 2 + 1] << 8),
+      ),
+    );
+    expect(command, contains("\$ProgressPreference = 'SilentlyContinue'"));
+    expect(
+      command.indexOf('\$ProgressPreference'),
+      lessThan(command.indexOf('\$actentUtf8')),
+    );
   });
 }

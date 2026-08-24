@@ -263,7 +263,7 @@ abstract class AppLocalizations {
   /// No description provided for @authorizationConfigured.
   ///
   /// In en, this message translates to:
-  /// **'authorization configured'**
+  /// **'token configured'**
   String get authorizationConfigured;
 
   /// No description provided for @attachmentRetention.
@@ -359,7 +359,7 @@ abstract class AppLocalizations {
   /// No description provided for @authorizationEmptyToClear.
   ///
   /// In en, this message translates to:
-  /// **'Authorization (empty to clear)'**
+  /// **'ntfy token (tk_..., empty to clear)'**
   String get authorizationEmptyToClear;
 
   /// No description provided for @cancel.

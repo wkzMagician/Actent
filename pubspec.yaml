@@ -30,8 +30,18 @@ dependencies:
   dartloom_messaging:
     git:
       url: https://github.com/wkzMagician/dartloom.git
-      ref: 831191f
+      ref: main
       path: packages/dartloom_messaging
+  dartloom_messaging_lan:
+    git:
+      url: https://github.com/wkzMagician/dartloom.git
+      ref: main
+      path: packages/dartloom_messaging_lan
+  dartloom_messaging_ntfy:
+    git:
+      url: https://github.com/wkzMagician/dartloom.git
+      ref: main
+      path: packages/dartloom_messaging_ntfy
   dartloom_pairing:
     git:
       url: https://github.com/wkzMagician/dartloom.git
@@ -159,7 +169,7 @@ dependency_overrides:
   dartloom_messaging:
     git:
       url: https://github.com/wkzMagician/dartloom.git
-      ref: 831191f
+      ref: main
       path: packages/dartloom_messaging
   dartloom_pairing:
     git:

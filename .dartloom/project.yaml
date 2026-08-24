@@ -24,6 +24,8 @@ packages:
   - dartloom_singleton
   - dartloom_singleton_socket
   - dartloom_messaging
+  - dartloom_messaging_ntfy
+  - dartloom_messaging_lan
   - dartloom_pairing
 
 build:

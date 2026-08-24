@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartloom_storage/dartloom_storage.dart';
+import 'package:dartloom_messaging_ntfy/dartloom_messaging_ntfy.dart';
 import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
 import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_preferences.dart';
 
@@ -205,6 +206,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       repository: repository,
       relay: relay,
       attachmentRoot: attachmentRoot,
+      attachmentStore: openedObjectStore,
       seenPacketRetention: packetDedupRetention,
       lanServerConfig: lanServerConfig,
       readAttachment: kIsWeb
@@ -238,7 +240,8 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
           publicKey: identity.publicKey,
           endpoint: {
             'relayUrl': relay.server.toString(),
-            'relayTopic': relay.topic,
+            'relayTopic': relay.controlTopic,
+            'relayBlobTopic': relay.blobTopic,
             if (transport.lanHost != null) 'lanHost': transport.lanHost,
             if (transport.lanPort != null) 'lanPort': transport.lanPort,
             if (transport.lanCertificateSha256 != null)
@@ -264,15 +267,17 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       deviceId: identity.deviceId,
       deviceDisplayName: deviceDisplayName,
       publicKey: identity.publicKey,
-      relayTopic: relay.topic,
+      relayTopic: relay.controlTopic,
+      relayBlobTopic: relay.blobTopic,
       relayServer: relay.server,
-      relayAuthorizationConfigured: relay.authorization != null,
-      onRelaySettingsChanged: (server, authorization) async {
-        await secretRepository.write('relay.server', server.toString());
-        if (authorization == null || authorization.isEmpty) {
-          await secretRepository.remove('relay.authorization');
+      relayTokenConfigured: relay.token != null,
+      onRelaySettingsChanged: (server, token) async {
+        await secretRepository.write('relay.v2.server', server.toString());
+        if (token == null || token.isEmpty) {
+          await secretRepository.remove('relay.v2.token');
         } else {
-          await secretRepository.write('relay.authorization', authorization);
+          NtfyCredentials(token);
+          await secretRepository.write('relay.v2.token', token);
         }
       },
       lanHost: transport.lanHost,
@@ -282,10 +287,9 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       pairingDiscovery: MdnsPairingDiscovery(
         serviceName: actentMdnsServiceName,
       ),
-      pairingHandshake: PairingRelayHandshake(
-        server: relay.server,
-        authorization: relay.authorization,
-      ),
+      pairingHandshake: relay.token == null
+          ? null
+          : PairingRelayHandshake(server: relay.server, token: relay.token!),
       attachmentRetention: attachmentRoot == null
           ? null
           : AttachmentRetentionManager(

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:cryptography/cryptography.dart';
+import 'package:dartloom_storage/dartloom_storage.dart';
 
 import '../messaging/message_connection.dart';
 import '../messaging/attachment_chunks.dart';
@@ -16,6 +17,7 @@ import 'actent_models.dart';
 import 'actent_attachment_transfer.dart';
 import 'actent_router.dart';
 import 'actent_store.dart';
+import 'actent_transport_state.dart';
 import 'secret_repository.dart';
 
 enum PeerConnectionState { connected, disconnected }
@@ -37,31 +39,47 @@ class PeerConnectionStatus {
 class ActentRelaySettings {
   const ActentRelaySettings({
     required this.server,
-    required this.topic,
-    this.authorization,
+    required this.controlTopic,
+    required this.blobTopic,
+    this.token,
   });
 
   final Uri server;
-  final String topic;
-  final String? authorization;
+  final String controlTopic;
+  final String blobTopic;
+  final String? token;
 
   static Future<ActentRelaySettings> load(
     ActentSecretRepository secrets,
   ) async {
-    var topic = await secrets.read('relay.inbox.topic');
-    if (topic == null || topic.length < 24) {
-      topic = _newTopic();
-      await secrets.write('relay.inbox.topic', topic);
+    if (await secrets.read('relay.protocol.version') != '2') {
+      await secrets.remove('relay.inbox.topic');
+      await secrets.remove('relay.authorization');
+      await secrets.remove('relay.server');
+      await secrets.write('relay.protocol.version', '2');
     }
-    final serverText = await secrets.read('relay.server') ?? 'https://ntfy.sh';
+    var controlTopic = await secrets.read('relay.v2.controlTopic');
+    if (controlTopic == null || controlTopic.length < 24) {
+      controlTopic = _newTopic();
+      await secrets.write('relay.v2.controlTopic', controlTopic);
+    }
+    var blobTopic = await secrets.read('relay.v2.blobTopic');
+    if (blobTopic == null || blobTopic.length < 24) {
+      blobTopic = _newTopic();
+      await secrets.write('relay.v2.blobTopic', blobTopic);
+    }
+    final serverText =
+        await secrets.read('relay.v2.server') ??
+        'https://actent.wkzmagician.top';
     final server = Uri.tryParse(serverText);
     if (server == null || !server.hasScheme || server.host.isEmpty) {
-      throw StateError('invalid relay.server setting');
+      throw StateError('invalid relay.v2.server setting');
     }
     return ActentRelaySettings(
       server: server,
-      topic: topic,
-      authorization: await secrets.read('relay.authorization'),
+      controlTopic: controlTopic,
+      blobTopic: blobTopic,
+      token: await secrets.read('relay.v2.token'),
     );
   }
 }
@@ -78,25 +96,37 @@ class ActentTransportService implements MessageConnection {
     required this.repository,
     required this.relay,
     this.attachmentRoot,
+    this.attachmentStore,
     this.maxMessageBytes,
     this.seenPacketRetention = const Duration(days: 7),
     this.lanServerConfig,
     SeenPacketStore? seenPackets,
     this.lanConnectionFor,
+    this.lanBlobStoreFor,
     this.relayPublisherFor,
     this.subscriptionFor,
+    this.pollerFor,
+    this.blobStoreFor,
     this.readAttachment,
     this.writeAttachment,
     this.presenceInterval = const Duration(seconds: 30),
     this.presenceTimeout = const Duration(seconds: 75),
+    ActentTransportStateStore? stateStore,
   }) : _seenPackets =
-           seenPackets ?? SeenPacketStore(retention: seenPacketRetention);
+           seenPackets ?? SeenPacketStore(retention: seenPacketRetention),
+       _stateStore =
+           stateStore ??
+           ActentTransportStateStore(
+             repository.store,
+             retention: seenPacketRetention,
+           );
 
   final String deviceId;
   final PacketIdentity identity;
   final ActentRepository repository;
   final ActentRelaySettings relay;
   final Directory? attachmentRoot;
+  final ObjectStore? attachmentStore;
 
   /// Optional application policy. A null value means that Actent does not
   /// impose an arbitrary whole-message limit; the transport may still reject
@@ -105,9 +135,13 @@ class ActentTransportService implements MessageConnection {
   final Duration seenPacketRetention;
   final ActentLanServerConfig? lanServerConfig;
   final PacketConnection Function(Device device)? lanConnectionFor;
-  final RelayPublisher Function(Uri server)? relayPublisherFor;
-  final NtfyPacketSubscription Function(Uri server, String topic, String? auth)?
+  final BlobStore Function(Device device)? lanBlobStoreFor;
+  final RelayPublisher Function(Uri server, String token)? relayPublisherFor;
+  final NtfyPacketSubscription Function(Uri server, String topic, String token)?
   subscriptionFor;
+  final NtfyPacketPoller Function(Uri server, String topic, String token)?
+  pollerFor;
+  final BlobStore Function(Uri server, String token)? blobStoreFor;
   final Future<Uint8List?> Function(String handle)? readAttachment;
   final Future<String> Function(
     String messageId,
@@ -116,6 +150,7 @@ class ActentTransportService implements MessageConnection {
   )?
   writeAttachment;
   final SeenPacketStore _seenPackets;
+  final ActentTransportStateStore _stateStore;
   final Duration presenceInterval;
   final Duration presenceTimeout;
   final StreamController<PeerConnectionStatus> _peerConnectionStatuses =
@@ -129,6 +164,9 @@ class ActentTransportService implements MessageConnection {
   Timer? _presenceTimer;
   final Map<String, _IncomingAttachmentTransfer> _incomingTransfers = {};
   final Map<String, Completer<Map<String, Set<int>>>> _resumeWaiters = {};
+  final Set<String> _activeOutgoingTransfers = <String>{};
+  final Set<String> _processingPackets = <String>{};
+  final MemoryLanBlobStore _lanBlobStore = MemoryLanBlobStore();
 
   String? get lanHost => lanServerConfig?.host;
   int? get lanPort => _lanServer?.boundPort;
@@ -139,11 +177,20 @@ class ActentTransportService implements MessageConnection {
   Future<void> start(ActentRouter router) async {
     if (_started) return;
     _router = router;
+    final expiredIncoming = await _stateStore.purgeExpired();
+    for (final state in expiredIncoming) {
+      await _discardIncomingTransfer(state);
+    }
+    final seenPackets = await _stateStore.loadSeenPackets();
+    for (final entry in seenPackets.entries) {
+      _seenPackets.remember(entry.key, seenAt: entry.value);
+    }
     final lanConfig = lanServerConfig;
     if (lanConfig != null) {
       final server = LanTlsPacketServer(
         securityContext: lanConfig.securityContext,
         onPacket: _receive,
+        blobStore: _lanBlobStore,
         host: lanConfig.bindAddress,
         port: lanConfig.port,
       );
@@ -155,30 +202,49 @@ class ActentTransportService implements MessageConnection {
         rethrow;
       }
     }
+    await _restoreIncomingTransfers();
     try {
-      final subscription =
-          subscriptionFor?.call(
-            relay.server,
-            relay.topic,
-            relay.authorization,
-          ) ??
-          NtfyPacketSubscription(
-            relay.server,
-            relay.topic,
-            authorization: relay.authorization,
+      final token = relay.token;
+      if (token != null) {
+        final subscription =
+            subscriptionFor?.call(relay.server, relay.controlTopic, token) ??
+            NtfyPacketSubscription(
+              server: relay.server,
+              channel: relay.controlTopic,
+              credentials: NtfyCredentials(token),
+            );
+        _subscription = subscription.listen().listen(
+          (packet) => unawaited(_receive(packet)),
+          onError: (_) {
+            // Relay streams are best effort. Startup catch-up and durable
+            // transfer state recover delivery after reconnect.
+          },
+        );
+        try {
+          final poller =
+              pollerFor?.call(relay.server, relay.controlTopic, token) ??
+              NtfyPacketPoller(
+                server: relay.server,
+                channel: relay.controlTopic,
+                credentials: NtfyCredentials(token),
+              );
+          final cached = await poller.poll(
+            since: DateTime.now().toUtc().subtract(seenPacketRetention),
           );
-      _subscription = subscription.listen().listen(
-        (packet) => unawaited(_receive(packet)),
-        onError: (_) {
-          // Relay streams are best effort. The next app start reconnects and
-          // durable requests remain in the repository until then.
-        },
-      );
+          for (final packet in cached) {
+            await _receive(packet);
+          }
+        } on Object {
+          // A failed cache poll must not prevent the live subscription from
+          // starting. The next launch retries the same seven-day window.
+        }
+      }
       _started = true;
       _presenceTimer = Timer.periodic(
         presenceInterval,
         (_) => unawaited(probePeers()),
       );
+      unawaited(_resumeOutgoingTransfers());
     } on Object {
       await _lanServer?.close();
       _lanServer = null;
@@ -201,12 +267,35 @@ class ActentTransportService implements MessageConnection {
       await _sendTransportPayload(recipientId, prepared.control);
       return;
     }
+    final durableTransfers = <Map<String, Object?>>[];
+    for (final transfer in prepared.transfers) {
+      durableTransfers.add(<String, Object?>{
+        'attachmentId': transfer.attachmentId,
+        'sourceHandle': transfer.sourceHandle,
+        'manifest': transfer.manifest.toJson(),
+        'key': base64UrlEncode(await transfer.key.extractBytes()),
+      });
+    }
+    await _stateStore.saveOutgoing(
+      OutgoingTransportState(
+        requestId: prepared.requestId,
+        recipientId: recipientId,
+        control: prepared.control,
+        transfers: durableTransfers,
+        createdAt: DateTime.now().toUtc(),
+      ),
+    );
     final requestId = prepared.requestId;
     final resumeWaiter = Completer<Map<String, Set<int>>>();
     // Register before publishing the offer: a LAN receiver can answer before
     // the publish call returns.
     _resumeWaiters[requestId] = resumeWaiter;
-    await _sendTransportPayload(recipientId, prepared.control);
+    try {
+      await _sendTransportPayload(recipientId, prepared.control);
+    } on Object {
+      _resumeWaiters.remove(requestId);
+      rethrow;
+    }
     final resume = await resumeWaiter.future.timeout(
       const Duration(seconds: 2),
       onTimeout: () => <String, Set<int>>{},
@@ -228,12 +317,25 @@ class ActentTransportService implements MessageConnection {
           index: index,
           key: transfer.key,
         );
+        final endpoint = _endpoint(device);
+        final blobTopic = endpoint.relayBlobTopic;
+        if (blobTopic == null || blobTopic.isEmpty) {
+          throw StateError('paired device has no relay blob topic');
+        }
+        final blob = await _putAttachmentBlob(
+          device,
+          blobTopic,
+          const AttachmentChunkBinaryCodec().encode(chunk),
+        );
         await _sendTransportPayload(recipientId, {
-          'type': 'attachmentChunk',
+          'type': 'attachmentChunkRef',
           'schemaVersion': actentSchemaVersion,
-          'requestId': requestId,
-          'attachmentId': transfer.attachmentId,
-          'chunk': chunk.toJson(),
+          'attachmentProtocol': AttachmentChunkReference(
+            transferId: requestId,
+            attachmentId: transfer.attachmentId,
+            index: index,
+            blob: blob,
+          ).toJson(),
         });
       }
     }
@@ -242,6 +344,7 @@ class ActentTransportService implements MessageConnection {
       'schemaVersion': actentSchemaVersion,
       'requestId': requestId,
     });
+    await _stateStore.deleteOutgoing(requestId);
   }
 
   Future<void> _sendTransportPayload(
@@ -266,21 +369,128 @@ class ActentTransportService implements MessageConnection {
     if (relayTopic == null || relayTopic.isEmpty) {
       throw StateError('paired device has no relay inbox topic');
     }
+    final token = relay.token;
+    if (token == null) {
+      throw StateError('ntfy token is not configured');
+    }
+    final server = endpoint.relayServer ?? relay.server;
     final sender = RoutedPacketSender(
       lan: lanConnectionFor?.call(device) ?? _defaultLanConnection(device),
       relay:
-          relayPublisherFor?.call(endpoint.relayServer ?? relay.server) ??
-          NtfyRelayPublisher(endpoint.relayServer ?? relay.server),
-      relayTopic: relayTopic,
-      relayAuthorization: endpoint.relayAuthorization,
+          relayPublisherFor?.call(server, token) ??
+          NtfyRelayPublisher(
+            server: server,
+            credentials: NtfyCredentials(token),
+          ),
+      relayChannel: relayTopic,
     );
     await sender.send(packet);
+  }
+
+  Future<void> _resumeOutgoingTransfers() async {
+    for (final state in await _stateStore.listOutgoing()) {
+      if (!_activeOutgoingTransfers.add(state.requestId)) continue;
+      try {
+        final device = await repository.getDevice(state.recipientId);
+        if (device == null || !device.authorized) continue;
+        final transfers = <_PreparedAttachmentTransfer>[];
+        for (final value in state.transfers) {
+          final sourceHandle = _requiredPayloadString(value, 'sourceHandle');
+          transfers.add(
+            _PreparedAttachmentTransfer(
+              attachmentId: _requiredPayloadString(value, 'attachmentId'),
+              sourceHandle: sourceHandle,
+              source: await _attachmentSource(sourceHandle),
+              manifest: AttachmentManifest.fromJson(value['manifest']),
+              key: _decodeTransferKey(_requiredPayloadString(value, 'key')),
+            ),
+          );
+        }
+        final prepared = _PreparedAttachmentPayload(
+          control: state.control,
+          requestId: state.requestId,
+          transfers: transfers,
+        );
+        await _transmitRestoredAttachments(state.recipientId, device, prepared);
+        await _stateStore.deleteOutgoing(state.requestId);
+      } on Object {
+        // The durable outbox remains available for the next launch.
+      } finally {
+        _activeOutgoingTransfers.remove(state.requestId);
+      }
+    }
+  }
+
+  Future<void> _transmitRestoredAttachments(
+    String recipientId,
+    Device device,
+    _PreparedAttachmentPayload prepared,
+  ) async {
+    final requestId = prepared.requestId;
+    final resumeWaiter = Completer<Map<String, Set<int>>>();
+    _resumeWaiters[requestId] = resumeWaiter;
+    try {
+      await _sendTransportPayload(recipientId, prepared.control);
+      final resume = await resumeWaiter.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => <String, Set<int>>{},
+      );
+      for (final transfer in prepared.transfers) {
+        final received = resume[transfer.attachmentId] ?? const <int>{};
+        for (var index = 0; index < transfer.manifest.totalChunks; index++) {
+          if (received.contains(index)) continue;
+          final offset = index * transfer.manifest.chunkSize;
+          final length = min(
+            transfer.manifest.chunkSize,
+            transfer.manifest.byteLength - offset,
+          );
+          final plaintext = await transfer.source.read(offset, length);
+          final chunk = await const AttachmentChunker().encryptChunk(
+            manifest: transfer.manifest,
+            plaintext: plaintext,
+            index: index,
+            key: transfer.key,
+          );
+          final endpoint = _endpoint(device);
+          final blobTopic = endpoint.relayBlobTopic;
+          if (blobTopic == null || blobTopic.isEmpty) {
+            throw StateError('paired device ntfy blob endpoint is unavailable');
+          }
+          final blob = await _preferredBlobStore(device).put(
+            channel: blobTopic,
+            objectId: _newOpaqueId(),
+            bytes: const AttachmentChunkBinaryCodec().encode(chunk),
+          );
+          await _sendTransportPayload(recipientId, <String, Object?>{
+            'type': 'attachmentChunkRef',
+            'schemaVersion': actentSchemaVersion,
+            'attachmentProtocol': AttachmentChunkReference(
+              transferId: requestId,
+              attachmentId: transfer.attachmentId,
+              index: index,
+              blob: blob,
+            ).toJson(),
+          });
+        }
+      }
+      await _sendTransportPayload(recipientId, <String, Object?>{
+        'type': 'attachmentCommit',
+        'schemaVersion': actentSchemaVersion,
+        'requestId': requestId,
+      });
+    } finally {
+      _resumeWaiters.remove(requestId);
+    }
   }
 
   Future<void> _receive(MessagingPacket packet) async {
     if (packet.recipientId != deviceId) return;
     final device = await repository.getDevice(packet.senderId);
     if (device == null || !device.authorized) return;
+    if (_seenPackets.contains(packet.packetId) ||
+        !_processingPackets.add(packet.packetId)) {
+      return;
+    }
     try {
       final connection = EncryptedMessageConnection(
         transport: const _UnavailablePacketConnection(),
@@ -288,7 +498,7 @@ class ActentTransportService implements MessageConnection {
         remotePublicKey: _decodePublicKey(device.publicKey),
         senderId: packet.senderId,
         recipientId: deviceId,
-        seenPackets: _seenPackets,
+        seenPackets: SeenPacketStore(retention: seenPacketRetention),
       );
       final payload = await connection.receive(
         packet,
@@ -331,8 +541,8 @@ class ActentTransportService implements MessageConnection {
               authenticatedSenderId: packet.senderId,
             );
           }
-        case 'attachmentChunk':
-          await _receiveAttachmentChunk(payload);
+        case 'attachmentChunkRef':
+          await _receiveAttachmentChunkReference(payload);
         case 'attachmentCommit':
           await _commitIncomingAttachmentTransfer(payload, router);
         case 'attachmentResume':
@@ -342,8 +552,12 @@ class ActentTransportService implements MessageConnection {
         case 'workCancel':
           await router.receive(payload, authenticatedSenderId: packet.senderId);
       }
+      _seenPackets.remember(packet.packetId, seenAt: packet.createdAt);
+      await _stateStore.rememberPacket(packet.packetId);
     } on Object {
       // Invalid packets are deliberately dropped before Inbox/queue access.
+    } finally {
+      _processingPackets.remove(packet.packetId);
     }
   }
 
@@ -437,7 +651,7 @@ class ActentTransportService implements MessageConnection {
     if (messageId is! String || messageId.isEmpty) {
       throw const FormatException('attachment message identity is missing');
     }
-    final chunker = const AttachmentChunker();
+    const chunker = AttachmentChunker(chunkSize: 8 * 1024 * 1024);
     final transfers = <_PreparedAttachmentTransfer>[];
     final descriptors = <Map<String, Object?>>[];
     final rewritten = <Map<String, Object?>>[];
@@ -461,6 +675,9 @@ class ActentTransportService implements MessageConnection {
         );
       }
       final source = await _attachmentSource(handle);
+      if (source.byteLength > 2 * 1024 * 1024 * 1024) {
+        throw StateError('single attachment exceeds the 2 GiB limit');
+      }
       totalBytes += source.byteLength;
       if (maxMessageBytes != null && totalBytes > maxMessageBytes!) {
         throw StateError(
@@ -483,6 +700,7 @@ class ActentTransportService implements MessageConnection {
       transfers.add(
         _PreparedAttachmentTransfer(
           attachmentId: attachmentId,
+          sourceHandle: handle,
           source: source,
           manifest: manifest,
           key: key,
@@ -517,8 +735,9 @@ class ActentTransportService implements MessageConnection {
 
   Future<void> _beginIncomingAttachmentTransfer(
     Map<String, Object?> payload,
-    String senderId,
-  ) async {
+    String senderId, {
+    DateTime? createdAt,
+  }) async {
     final requestId = _requestIdFromPayload(payload);
     final rawTransfers = payload['attachmentTransfers'];
     final request = payload['request'];
@@ -570,11 +789,7 @@ class ActentTransportService implements MessageConnection {
       if (keyValue is! String) {
         throw const FormatException('attachment transfer key is missing');
       }
-      final AttachmentSink? sink = attachmentRoot != null
-          ? ActentFileAttachmentSink(attachmentRoot!)
-          : writeAttachment == null
-          ? null
-          : ActentCallbackAttachmentSink(writeAttachment!);
+      final sink = _newAttachmentSink();
       if (sink == null) {
         throw const FormatException('attachment storage is unavailable');
       }
@@ -588,6 +803,14 @@ class ActentTransportService implements MessageConnection {
       receivers[manifest.attachmentId] = receiver;
       sinks[manifest.attachmentId] = handleSink;
     }
+    await _stateStore.saveIncoming(
+      IncomingTransportState(
+        requestId: requestId,
+        senderId: senderId,
+        payload: payload,
+        createdAt: createdAt ?? DateTime.now().toUtc(),
+      ),
+    );
     _incomingTransfers[requestId] = _IncomingAttachmentTransfer(
       payload: payload,
       receivers: receivers,
@@ -609,15 +832,118 @@ class ActentTransportService implements MessageConnection {
     });
   }
 
-  Future<void> _receiveAttachmentChunk(Map<String, Object?> payload) async {
-    final requestId = _requiredPayloadString(payload, 'requestId');
-    final attachmentId = _requiredPayloadString(payload, 'attachmentId');
-    final pending = _incomingTransfers[requestId];
-    final receiver = pending?.receivers[attachmentId];
+  Future<void> _restoreIncomingTransfers() async {
+    for (final state in await _stateStore.listIncoming()) {
+      try {
+        await _beginIncomingAttachmentTransfer(
+          state.payload,
+          state.senderId,
+          createdAt: state.createdAt,
+        );
+      } on Object {
+        // A transient network/storage error leaves the state for next launch.
+      }
+    }
+  }
+
+  Future<void> _discardIncomingTransfer(IncomingTransportState state) async {
+    final rawTransfers = state.payload['attachmentTransfers'];
+    if (rawTransfers is! List) return;
+    for (final rawTransfer in rawTransfers) {
+      if (rawTransfer is! Map) continue;
+      try {
+        final manifest = AttachmentManifest.fromJson(rawTransfer['manifest']);
+        final sink = _newAttachmentSink();
+        if (sink == null) continue;
+        await sink.begin(manifest);
+        await sink.abort(manifest);
+      } on Object {
+        // Expiry cleanup is best effort and never blocks transport startup.
+      }
+    }
+  }
+
+  AttachmentSink? _newAttachmentSink() => attachmentRoot != null
+      ? ActentFileAttachmentSink(attachmentRoot!)
+      : attachmentStore != null
+      ? ActentObjectStoreAttachmentSink(attachmentStore!)
+      : writeAttachment == null
+      ? null
+      : ActentCallbackAttachmentSink(writeAttachment!);
+
+  Future<void> _receiveAttachmentChunkReference(
+    Map<String, Object?> payload,
+  ) async {
+    final message = AttachmentProtocolMessage.fromJson(
+      payload['attachmentProtocol'],
+    );
+    if (message is! AttachmentChunkReference) {
+      throw const FormatException('attachment chunk reference is invalid');
+    }
+    final pending = _incomingTransfers[message.transferId];
+    final receiver = pending?.receivers[message.attachmentId];
     if (receiver == null) {
       throw const FormatException('unknown attachment transfer');
     }
-    await receiver.add(AttachmentChunk.fromJson(payload['chunk']));
+    final bytes = message.blob.provider == 'lan'
+        ? await _lanBlobStore.get(message.blob)
+        : await _getNtfyBlob(message.blob);
+    final chunk = const AttachmentChunkBinaryCodec().decode(
+      bytes,
+      messageId: receiver.manifest.messageId,
+      attachmentId: receiver.manifest.attachmentId,
+    );
+    if (chunk.index != message.index) {
+      throw const FormatException('attachment chunk reference index mismatch');
+    }
+    await receiver.add(chunk);
+  }
+
+  BlobStore _blobStore(Uri server, String token) =>
+      blobStoreFor?.call(server, token) ??
+      NtfyBlobStore(server: server, credentials: NtfyCredentials(token));
+
+  Future<Uint8List> _getNtfyBlob(BlobReference reference) {
+    final token = relay.token;
+    if (token == null) throw StateError('ntfy token is not configured');
+    return _blobStore(relay.server, token).get(reference);
+  }
+
+  Future<BlobReference> _putAttachmentBlob(
+    Device device,
+    String channel,
+    Uint8List bytes,
+  ) =>
+      _preferredBlobStore(device)
+          .put(channel: channel, objectId: _newOpaqueId(), bytes: bytes);
+
+  BlobStore _preferredBlobStore(Device device) {
+    final endpoint = _endpoint(device);
+    BlobStore? lanStore = lanBlobStoreFor?.call(device);
+    final host = endpoint.lanHost;
+    final port = endpoint.lanPort;
+    if (lanStore == null &&
+        host != null &&
+        host.isNotEmpty &&
+        port != null &&
+        port > 0) {
+      lanStore = LanTlsBlobStore(
+        host: host,
+        port: port,
+        localStore: _lanBlobStore,
+        certificateSha256: endpoint.certificateSha256,
+      );
+    }
+    final token = relay.token;
+    final ntfyStore = token == null
+        ? null
+        : _blobStore(endpoint.relayServer ?? relay.server, token);
+    if (lanStore != null && ntfyStore != null) {
+      return _FallbackBlobStore(lanStore, ntfyStore);
+    }
+    return lanStore ??
+        ntfyStore ??
+        (throw StateError('no LAN or ntfy blob transport is configured'));
   }
 
   Future<void> _commitIncomingAttachmentTransfer(
@@ -627,6 +953,7 @@ class ActentTransportService implements MessageConnection {
     final requestId = _requiredPayloadString(payload, 'requestId');
     final pending = _incomingTransfers[requestId];
     if (pending == null) {
+      if (await _stateStore.isCompleted(requestId)) return;
       throw const FormatException('unknown attachment transfer');
     }
     try {
@@ -659,15 +986,16 @@ class ActentTransportService implements MessageConnection {
       final materialized = Map<String, Object?>.from(pending.payload)
         ..['request'] = originalRequest
         ..remove('attachmentTransfers');
-      _incomingTransfers.remove(requestId);
       await router.receive(
         materialized,
         authenticatedSenderId: pending.senderId,
       );
+      await _stateStore.markCompleted(requestId);
+      await _stateStore.deleteIncoming(requestId);
+      _incomingTransfers.remove(requestId);
     } on Object {
-      for (final receiver in pending.receivers.values) {
-        await receiver.abort();
-      }
+      // Keep committed files and durable state. Replaying commit is idempotent
+      // and lets a restart finish routing after a transient storage failure.
       rethrow;
     }
   }
@@ -810,7 +1138,7 @@ class ActentEndpoint {
   const ActentEndpoint({
     this.relayServer,
     this.relayTopic,
-    this.relayAuthorization,
+    this.relayBlobTopic,
     this.lanHost,
     this.lanPort,
     this.certificateSha256,
@@ -818,7 +1146,7 @@ class ActentEndpoint {
 
   final Uri? relayServer;
   final String? relayTopic;
-  final String? relayAuthorization;
+  final String? relayBlobTopic;
   final String? lanHost;
   final int? lanPort;
   final String? certificateSha256;
@@ -836,7 +1164,7 @@ ActentEndpoint _endpoint(Device device) {
   return ActentEndpoint(
     relayServer: relayServer,
     relayTopic: endpoint['relayTopic'] as String?,
-    relayAuthorization: endpoint['relayAuthorization'] as String?,
+    relayBlobTopic: endpoint['relayBlobTopic'] as String?,
     lanHost: endpoint['lanHost'] as String?,
     lanPort: port is int ? port : int.tryParse('$port'),
     certificateSha256: endpoint['certificateSha256'] as String?,
@@ -880,12 +1208,14 @@ class _PreparedAttachmentPayload {
 class _PreparedAttachmentTransfer {
   const _PreparedAttachmentTransfer({
     required this.attachmentId,
+    required this.sourceHandle,
     required this.source,
     required this.manifest,
     required this.key,
   });
 
   final String attachmentId;
+  final String sourceHandle;
   final AttachmentSource source;
   final AttachmentManifest manifest;
   final SecretKey key;
@@ -905,6 +1235,39 @@ class _IncomingAttachmentTransfer {
   final String senderId;
 }
 
+class _FallbackBlobStore implements BlobStore {
+  const _FallbackBlobStore(this.primary, this.fallback);
+
+  final BlobStore primary;
+  final BlobStore fallback;
+
+  @override
+  Future<BlobReference> put({
+    required String channel,
+    required String objectId,
+    required Uint8List bytes,
+  }) async {
+    try {
+      return await primary.put(
+        channel: channel,
+        objectId: objectId,
+        bytes: bytes,
+      );
+    } on Object {
+      return fallback.put(channel: channel, objectId: objectId, bytes: bytes);
+    }
+  }
+
+  @override
+  Future<Uint8List> get(BlobReference reference) async {
+    try {
+      return await primary.get(reference);
+    } on Object {
+      return fallback.get(reference);
+    }
+  }
+}
+
 class _UnavailablePacketConnection implements PacketConnection {
   const _UnavailablePacketConnection();
 
@@ -915,6 +1278,10 @@ class _UnavailablePacketConnection implements PacketConnection {
 
 String _newTopic() =>
     'actent-${base64UrlEncode(List<int>.generate(32, (_) => Random.secure().nextInt(256))).replaceAll('=', '')}';
+
+String _newOpaqueId() =>
+    base64UrlEncode(List<int>.generate(24, (_) => Random.secure().nextInt(256)))
+        .replaceAll('=', '');
 
 Future<String?> _firstLanIpv4() async {
   final interfaces = await NetworkInterface.list(

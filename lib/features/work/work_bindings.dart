@@ -107,6 +107,7 @@ bool _isPowerShell(String value) {
 
 String _powerShellBootstrap(String source) =>
     '''
+\$ProgressPreference = 'SilentlyContinue'
 \$actentUtf8 = New-Object System.Text.UTF8Encoding(\$false)
 [Console]::InputEncoding = \$actentUtf8
 [Console]::OutputEncoding = \$actentUtf8

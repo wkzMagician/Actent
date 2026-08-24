@@ -98,7 +98,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get relayServer => 'Relay server';
 
   @override
-  String get authorizationConfigured => 'authorization configured';
+  String get authorizationConfigured => 'token configured';
 
   @override
   String get attachmentRetention => 'Attachment retention';
@@ -151,7 +151,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ntfyServerUrl => 'ntfy server URL';
 
   @override
-  String get authorizationEmptyToClear => 'Authorization (empty to clear)';
+  String get authorizationEmptyToClear => 'ntfy token (tk_..., empty to clear)';
 
   @override
   String get cancel => 'Cancel';

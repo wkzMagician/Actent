@@ -6,6 +6,16 @@ export 'package:dartloom_messaging/attachment_chunks.dart'
         AttachmentChunker,
         AttachmentManifest,
         AttachmentReassembler;
+export 'package:dartloom_messaging/attachment_binary.dart'
+    show AttachmentChunkBinaryCodec;
+export 'package:dartloom_messaging/attachment_protocol.dart'
+    show
+        AttachmentChunkReference,
+        AttachmentCommit,
+        AttachmentOffer,
+        AttachmentProtocolMessage,
+        AttachmentResume,
+        ChunkRange;
 export 'package:dartloom_messaging/attachment_stream.dart'
     show
         AttachmentChunkSender,

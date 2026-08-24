@@ -7,20 +7,25 @@ import 'pairing_relay_contracts.dart' as capability;
 class PairingRelayHandshake {
   PairingRelayHandshake({
     required this.server,
-    this.authorization,
+    required this.token,
     RelayPublisher? publisher,
     this.subscriptionFactory,
-  }) : _publisher = publisher ?? NtfyRelayPublisher(server),
+  }) : _publisher =
+           publisher ??
+           NtfyRelayPublisher(
+             server: server,
+             credentials: NtfyCredentials(token),
+           ),
        _subscriptionFactory =
            subscriptionFactory ??
            ((server, topic, authorization) => NtfyJsonSubscription(
-             server,
-             topic,
-             authorization: authorization,
+             server: server,
+             channel: topic,
+             credentials: NtfyCredentials(token),
            )) {
     _delegate = capability.PairingRelayHandshake(
       server: server,
-      authorization: authorization,
+      authorization: null,
       publisher: _RelayPublisherAdapter(_publisher),
       subscriptionFactory: (relayServer, topic, relayAuthorization) =>
           _SubscriptionAdapter(
@@ -30,7 +35,7 @@ class PairingRelayHandshake {
   }
 
   final Uri server;
-  final String? authorization;
+  final String token;
   final NtfyJsonSubscription Function(Uri server, String topic, String? auth)?
   subscriptionFactory;
   final RelayPublisher _publisher;
@@ -45,7 +50,8 @@ class PairingRelayHandshake {
     required String displayName,
     required String platform,
     required String relayUrl,
-    required String relayTopic,
+    required String controlTopic,
+    required String blobTopic,
     String? lanHost,
     int? lanPort,
     String? certificateSha256,
@@ -56,7 +62,8 @@ class PairingRelayHandshake {
     displayName: displayName,
     platform: platform,
     relayUrl: relayUrl,
-    relayTopic: relayTopic,
+    controlTopic: controlTopic,
+    blobTopic: blobTopic,
     lanHost: lanHost,
     lanPort: lanPort,
     certificateSha256: certificateSha256,
@@ -87,7 +94,7 @@ class _RelayPublisherAdapter implements capability.PairingRelayPublisher {
 
   @override
   Future<void> publish(String topic, String body, {String? authorization}) =>
-      delegate.publish(topic, body, authorization: authorization);
+      delegate.publish(topic, body);
 }
 
 class _SubscriptionAdapter implements capability.PairingRelaySubscription {

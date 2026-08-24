@@ -34,8 +34,9 @@ class ActentHomePage extends StatefulWidget {
     this.deviceDisplayName,
     this.publicKey,
     this.relayTopic,
+    this.relayBlobTopic,
     this.relayServer,
-    this.relayAuthorizationConfigured = false,
+    this.relayTokenConfigured = false,
     this.onRelaySettingsChanged,
     this.lanHost,
     this.lanPort,
@@ -69,8 +70,9 @@ class ActentHomePage extends StatefulWidget {
   final String? deviceDisplayName;
   final String? publicKey;
   final String? relayTopic;
+  final String? relayBlobTopic;
   final Uri? relayServer;
-  final bool relayAuthorizationConfigured;
+  final bool relayTokenConfigured;
   final Future<void> Function(Uri server, String? authorization)?
   onRelaySettingsChanged;
   final String? lanHost;
@@ -2391,8 +2393,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
       publicKey: widget.publicKey ?? 'local-public-key',
       displayName: widget.deviceDisplayName ?? 'Actent device',
       platform: 'paired',
-      relayUrl: widget.pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
-      relayTopic: widget.relayTopic ?? '',
+      relayUrl:
+          widget.pairingHandshake?.server.toString() ??
+          'https://actent.wkzmagician.top',
+      controlTopic: widget.relayTopic ?? '',
+      blobTopic: widget.relayBlobTopic ?? '',
       lanHost: widget.lanHost,
       lanPort: widget.lanPort,
       serverCertificateSha256: invite.issuerCertificateSha256,
@@ -2406,7 +2411,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     await _savePairedDevice(
       invite,
       authorized: true,
-      relayTopic: invite.issuerRelayTopic,
+      controlTopic: invite.issuerControlTopic,
+      blobTopic: invite.issuerBlobTopic,
     );
   }
 
@@ -2480,9 +2486,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
       uriScheme: actentPairingUriScheme,
       issuerDeviceId: widget.deviceId ?? 'local-device',
       issuerPublicKey: widget.publicKey ?? 'local-public-key',
-      relayUrl: pairingHandshake?.server.toString() ?? 'https://ntfy.sh',
+      relayUrl:
+          pairingHandshake?.server.toString() ??
+          'https://actent.wkzmagician.top',
       temporaryTopic: 'actent-pair-${DateTime.now().microsecondsSinceEpoch}',
-      issuerRelayTopic: widget.relayTopic ?? '',
+      issuerControlTopic: widget.relayTopic ?? '',
+      issuerBlobTopic: widget.relayBlobTopic ?? '',
       issuerLanHost: widget.lanHost,
       issuerLanPort: widget.lanPort,
       issuerPairingLanPort: pairingPort,
@@ -2652,7 +2661,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
         displayName: widget.deviceDisplayName ?? 'Actent device',
         platform: 'paired',
         relayUrl: pairingHandshake.server.toString(),
-        relayTopic: widget.relayTopic ?? '',
+        controlTopic: widget.relayTopic ?? '',
+        blobTopic: widget.relayBlobTopic ?? '',
         lanHost: widget.lanHost,
         lanPort: widget.lanPort,
         certificateSha256: widget.lanCertificateSha256,
@@ -2660,7 +2670,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _savePairedDevice(
         invite,
         authorized: false,
-        relayTopic: invite.issuerRelayTopic,
+        controlTopic: invite.issuerControlTopic,
+        blobTopic: invite.issuerBlobTopic,
       );
       _waitForPairingConfirmation(invite, acceptance);
       return;
@@ -2668,7 +2679,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     await _savePairedDevice(
       invite,
       authorized: true,
-      relayTopic: invite.issuerRelayTopic,
+      controlTopic: invite.issuerControlTopic,
+      blobTopic: invite.issuerBlobTopic,
     );
   }
 
@@ -2696,7 +2708,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
           publicKey: acceptance.publicKey,
           endpoint: {
             'relayUrl': acceptance.relayUrl,
-            'relayTopic': acceptance.relayTopic,
+            'relayTopic': acceptance.controlTopic,
+            'relayBlobTopic': acceptance.blobTopic,
             if (acceptance.lanHost != null) 'lanHost': acceptance.lanHost,
             if (acceptance.lanPort != null) 'lanPort': acceptance.lanPort,
             if (acceptance.certificateSha256 != null)
@@ -2797,7 +2810,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
       await _savePairedDevice(
         invite,
         authorized: true,
-        relayTopic: invite.issuerRelayTopic,
+        controlTopic: invite.issuerControlTopic,
+        blobTopic: invite.issuerBlobTopic,
       );
     } on Object {
       // The pending device remains unauthorized until the user retries the
@@ -2808,7 +2822,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
   Future<void> _savePairedDevice(
     PairingInvite invite, {
     required bool authorized,
-    required String relayTopic,
+    required String controlTopic,
+    required String blobTopic,
   }) async {
     final repository = widget.repository;
     if (repository == null) return;
@@ -2820,7 +2835,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
         publicKey: invite.issuerPublicKey,
         endpoint: {
           'relayUrl': invite.relayUrl,
-          'relayTopic': relayTopic,
+          'relayTopic': controlTopic,
+          'relayBlobTopic': blobTopic,
           if (invite.issuerLanHost != null) 'lanHost': invite.issuerLanHost,
           if (invite.issuerLanPort != null) 'lanPort': invite.issuerLanPort,
           if (invite.issuerPairingLanPort != null)
@@ -2868,8 +2884,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
           leading: const Icon(Icons.cloud_outlined),
           title: Text(l10n.relayServer),
           subtitle: Text(
-            '${widget.relayServer ?? Uri.parse('https://ntfy.sh')}'
-            '${widget.relayAuthorizationConfigured ? ' · ${l10n.authorizationConfigured}' : ''}',
+            '${widget.relayServer ?? Uri.parse('https://actent.wkzmagician.top')}'
+            '${widget.relayTokenConfigured ? ' · ${l10n.authorizationConfigured}' : ''}',
           ),
           onTap: _editRelaySettings,
         ),
@@ -3124,7 +3140,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
       context: context,
       builder: (dialogContext) {
         final server = TextEditingController(
-          text: (widget.relayServer ?? Uri.parse('https://ntfy.sh')).toString(),
+          text:
+              (widget.relayServer ??
+                      Uri.parse('https://actent.wkzmagician.top'))
+                  .toString(),
         );
         final authorization = TextEditingController();
         return AlertDialog(
@@ -3386,7 +3405,7 @@ class _ActivityDetailPage extends StatelessWidget {
           if (diagnostics.stderr != null)
             _diagnosticCard(
               context,
-              '错误输出',
+              '标准错误输出',
               diagnostics.stderr!,
               diagnostics.stderrTruncated,
             ),

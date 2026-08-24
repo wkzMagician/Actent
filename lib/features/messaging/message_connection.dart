@@ -1,19 +1,29 @@
-// Actent uses the generic Dartloom messaging capability through this
-// application-owned import boundary. No Actent protocol types live in the
-// capability transport implementation.
+// Actent uses generic Dartloom contracts through this application-owned import
+// boundary. Concrete adapters are composed in lib/app and transport code.
 export 'package:dartloom_messaging/packet_transport.dart'
     show
-        LanPacketFrame,
-        LanPacketSender,
-        LanTlsPacketConnection,
-        LanTlsPacketServer,
         MemoryPacketConnection,
-        NtfyJsonSubscription,
-        NtfyPacketSubscription,
-        NtfyRelayPublisher,
         PacketConnection,
         RelayPublishException,
         RelayPublisher,
         RetryPolicy,
-        RoutedPacketSender,
+        RoutedPacketSender;
+export 'package:dartloom_messaging/blob_contracts.dart'
+    show BlobReference, BlobStore, BlobStoreException;
+export 'package:dartloom_messaging_lan/dartloom_messaging_lan.dart'
+    show
+        LanPacketFrame,
+        LanPacketSender,
+        LanTlsBlobStore,
+        LanTlsPacketConnection,
+        LanTlsPacketServer,
+        MemoryLanBlobStore;
+export 'package:dartloom_messaging_ntfy/dartloom_messaging_ntfy.dart'
+    show
+        NtfyBlobStore,
+        NtfyCredentials,
+        NtfyJsonSubscription,
+        NtfyPacketPoller,
+        NtfyPacketSubscription,
+        NtfyRelayPublisher,
         WebSocketConnector;

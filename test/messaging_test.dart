@@ -163,7 +163,7 @@ void main() {
     final sender = RoutedPacketSender(
       lan: lan,
       relay: relay,
-      relayTopic: 'topic',
+      relayChannel: 'topic',
       policy: const RetryPolicy(maxAttempts: 3),
       wait: (_) async {},
     );
@@ -190,19 +190,16 @@ void main() {
     () async {
       final client = _FakeHttpClient(statusCode: 202);
       final publisher = NtfyRelayPublisher(
-        Uri.parse('https://relay.example/base'),
+        server: Uri.parse('https://relay.example/base'),
+        credentials: NtfyCredentials('tk_secret'),
         client: client,
       );
-      await publisher.publish(
-        'private-topic',
-        '{"packet":1}',
-        authorization: 'Bearer secret',
-      );
+      await publisher.publish('private-topic', '{"packet":1}');
       expect(
         client.lastRequest!.url.toString(),
         'https://relay.example/base/private-topic',
       );
-      expect(client.lastRequest!.headers['authorization'], 'Bearer secret');
+      expect(client.lastRequest!.headers['authorization'], 'Bearer tk_secret');
 
       client.statusCode = 429;
       client.responseHeaders = const {'retry-after': '4'};
@@ -312,11 +309,7 @@ class _FakeRelay implements RelayPublisher {
   var attempts = 0;
 
   @override
-  Future<void> publish(
-    String topic,
-    String body, {
-    String? authorization,
-  }) async {
+  Future<void> publish(String topic, String body) async {
     attempts++;
     if (attempts <= failuresBeforeSuccess) {
       throw const RelayPublishException('temporary', statusCode: 500);

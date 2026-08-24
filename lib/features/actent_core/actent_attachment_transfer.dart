@@ -3,6 +3,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:dartloom_storage/dartloom_storage.dart';
+
 import '../messaging/attachment_chunks.dart';
 
 abstract interface class ActentAttachmentSinkHandle {
@@ -49,11 +51,17 @@ class ActentFileAttachmentSink
     _parts[_key(manifest)] = File(
       '${directory.path}${Platform.pathSeparator}payload.part',
     );
-    _completedHandle = null;
+    final completed = File('${directory.path}${Platform.pathSeparator}payload');
+    _completedHandle = await completed.exists() ? completed.path : null;
   }
 
   @override
   Future<Set<int>> receivedChunkIndexes(AttachmentManifest manifest) async {
+    if (_completedHandle != null) {
+      return Set<int>.from(
+        List<int>.generate(manifest.totalChunks, (index) => index),
+      );
+    }
     final ranges = await _rangesFile(manifest);
     if (!await ranges.exists()) return <int>{};
     final value = jsonDecode(await ranges.readAsString());
@@ -102,6 +110,10 @@ class ActentFileAttachmentSink
     final part = _parts[_key(manifest)];
     if (part == null) throw StateError('attachment sink was not started');
     final target = File('${part.parent.path}${Platform.pathSeparator}payload');
+    if (await target.exists()) {
+      _completedHandle = target.path;
+      return;
+    }
     if (await target.exists()) await target.delete();
     await part.rename(target.path);
     final ranges = await _rangesFile(manifest);
@@ -113,8 +125,15 @@ class ActentFileAttachmentSink
   Future<void> abort(AttachmentManifest manifest) async {
     final part = _parts.remove(_key(manifest));
     if (part != null && await part.exists()) await part.delete();
-    final ranges = await _rangesFile(manifest);
-    if (await ranges.exists()) await ranges.delete();
+    final completed = part == null
+        ? null
+        : File('${part.parent.path}${Platform.pathSeparator}payload');
+    if (completed != null && await completed.exists()) await completed.delete();
+    final ranges = part == null
+        ? null
+        : File('${part.parent.path}${Platform.pathSeparator}ranges.json');
+    if (ranges != null && await ranges.exists()) await ranges.delete();
+    _completedHandle = null;
   }
 
   Future<File> _rangesFile(AttachmentManifest manifest) async {
@@ -178,5 +197,97 @@ class ActentCallbackAttachmentSink
   Future<void> abort(AttachmentManifest manifest) => _memory.abort(manifest);
 }
 
+/// Restart-safe attachment sink for Web/IndexedDB and other ObjectStore-backed
+/// application compositions. Each plaintext chunk is local-only and removed
+/// after the verified final object is assembled.
+class ActentObjectStoreAttachmentSink
+    implements AttachmentSink, ActentAttachmentSinkHandle {
+  ActentObjectStoreAttachmentSink(this.store);
+
+  final ObjectStore store;
+  String? _completedHandle;
+
+  @override
+  String? get completedHandle => _completedHandle;
+
+  @override
+  Future<void> begin(AttachmentManifest manifest) async {
+    final key = _completedKey(manifest);
+    _completedHandle = await store.read(key) == null
+        ? null
+        : 'actent-indexeddb://$key';
+  }
+
+  @override
+  Future<Set<int>> receivedChunkIndexes(AttachmentManifest manifest) async {
+    if (_completedHandle != null) {
+      return Set<int>.from(
+        List<int>.generate(manifest.totalChunks, (index) => index),
+      );
+    }
+    final prefix = '${_chunkPrefix(manifest)}/';
+    final indexes = <int>{};
+    for (final item in await store.scan()) {
+      if (!item.key.startsWith(prefix)) continue;
+      final index = int.tryParse(item.key.substring(prefix.length));
+      if (index != null && index >= 0 && index < manifest.totalChunks) {
+        indexes.add(index);
+      }
+    }
+    return indexes;
+  }
+
+  @override
+  Future<void> writeChunk(
+    AttachmentManifest manifest,
+    int index,
+    Uint8List plaintext,
+  ) => store.write('${_chunkPrefix(manifest)}/$index', plaintext);
+
+  @override
+  Future<Uint8List> readChunk(AttachmentManifest manifest, int index) async {
+    final value = await store.read('${_chunkPrefix(manifest)}/$index');
+    if (value == null) throw StateError('attachment chunk is unavailable');
+    return Uint8List.fromList(value);
+  }
+
+  @override
+  Future<void> commit(AttachmentManifest manifest) async {
+    final key = _completedKey(manifest);
+    if (await store.read(key) == null) {
+      final bytes = BytesBuilder(copy: false);
+      for (var index = 0; index < manifest.totalChunks; index++) {
+        bytes.add(await readChunk(manifest, index));
+      }
+      await store.write(key, bytes.takeBytes());
+    }
+    await _deleteChunks(manifest);
+    _completedHandle = 'actent-indexeddb://$key';
+  }
+
+  @override
+  Future<void> abort(AttachmentManifest manifest) async {
+    await _deleteChunks(manifest);
+    await store.delete(_completedKey(manifest));
+    _completedHandle = null;
+  }
+
+  Future<void> _deleteChunks(AttachmentManifest manifest) async {
+    final prefix = '${_chunkPrefix(manifest)}/';
+    for (final item in await store.scan()) {
+      if (item.key.startsWith(prefix)) await store.delete(item.key);
+    }
+  }
+
+  String _chunkPrefix(AttachmentManifest manifest) =>
+      'attachmentTransfers/v2/${_id(manifest.messageId)}/${_id(manifest.attachmentId)}';
+
+  String _completedKey(AttachmentManifest manifest) =>
+      'attachments/v2/${_id(manifest.messageId)}/${_id(manifest.attachmentId)}';
+}
+
 String _key(AttachmentManifest manifest) =>
     '${manifest.messageId}\u0000${manifest.attachmentId}';
+
+String _id(String value) =>
+    base64Url.encode(utf8.encode(value)).replaceAll('=', '');

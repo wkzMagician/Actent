@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,6 +29,7 @@ void main() {
         endpoint: {
           'relayUrl': 'https://relay.example',
           'relayTopic': 'remote-topic',
+          'relayBlobTopic': 'remote-blob-topic',
         },
       ),
     );
@@ -38,9 +40,11 @@ void main() {
       repository: repository,
       relay: ActentRelaySettings(
         server: Uri.parse('https://relay.example'),
-        topic: 'local-topic',
+        controlTopic: 'local-topic',
+        blobTopic: 'local-blob-topic',
+        token: 'tk_test',
       ),
-      relayPublisherFor: (_) => publisher,
+      relayPublisherFor: (_, _) => publisher,
     );
 
     await service.send(
@@ -113,115 +117,126 @@ void main() {
     },
   );
 
-  test(
-    'packages private attachments as authenticated manifest chunks',
-    () async {
-      final root = await Directory.systemTemp.createTemp('actent-transport-');
-      addTearDown(() => root.delete(recursive: true));
-      final attachmentDirectory = Directory('${root.path}/message/attachment')
-        ..createSync(recursive: true);
-      final file = File('${attachmentDirectory.path}/payload')
-        ..writeAsBytesSync(utf8.encode('private attachment'));
-      final local = await PacketIdentity.generate();
-      final remote = await PacketIdentity.generate();
-      final repository = ActentRepository(MemoryActentJsonStore());
-      await repository.saveDevice(
-        Device(
-          id: 'remote',
-          displayName: 'Remote',
-          platform: 'windows',
-          publicKey: base64UrlEncode(remote.publicKey.bytes),
-          endpoint: {
-            'relayUrl': 'https://relay.example',
-            'relayTopic': 'remote-topic',
-          },
-        ),
-      );
-      final publisher = _CapturePublisher();
-      final service = ActentTransportService(
-        deviceId: 'local',
-        identity: local,
-        repository: repository,
-        relay: ActentRelaySettings(
-          server: Uri.parse('https://relay.example'),
-          topic: 'local-topic',
-        ),
-        attachmentRoot: root,
-        relayPublisherFor: (_) => publisher,
-      );
-      final message = ActentMessage(
-        id: 'message',
-        traceId: 'trace',
-        createdAt: DateTime.now().toUtc(),
-        source: const ActentSource(kind: 'test'),
-        content: ActentContent(
-          type: ActentContentType.file,
-          data: const {'name': 'payload'},
-        ),
-        attachments: [
-          ActentAttachment(
-            id: 'attachment',
-            name: 'payload',
-            mimeType: 'text/plain',
-            byteLength: file.lengthSync(),
-            handle: file.path,
-          ),
-        ],
-      );
-      final request = WorkRequest(
-        requestId: 'request',
-        message: message,
-        workId: 'work',
-        workRevision: 1,
-        sourceDeviceId: 'local',
-        targetDeviceId: 'remote',
-        createdAt: DateTime.now().toUtc(),
-        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
-      );
-      await service.send(
-        recipientId: 'remote',
-        payload: {
-          'type': 'workRequest',
-          'schemaVersion': actentSchemaVersion,
-          'request': request.toJson(),
+  test('prefers LAN blobs for authenticated attachment chunks', () async {
+    final root = await Directory.systemTemp.createTemp('actent-transport-');
+    addTearDown(() => root.delete(recursive: true));
+    final attachmentDirectory = Directory('${root.path}/message/attachment')
+      ..createSync(recursive: true);
+    final file = File('${attachmentDirectory.path}/payload')
+      ..writeAsBytesSync(utf8.encode('private attachment'));
+    final local = await PacketIdentity.generate();
+    final remote = await PacketIdentity.generate();
+    final repository = ActentRepository(MemoryActentJsonStore());
+    await repository.saveDevice(
+      Device(
+        id: 'remote',
+        displayName: 'Remote',
+        platform: 'windows',
+        publicKey: base64UrlEncode(remote.publicKey.bytes),
+        endpoint: {
+          'relayUrl': 'https://relay.example',
+          'relayTopic': 'remote-topic',
+          'relayBlobTopic': 'remote-blob-topic',
         },
+      ),
+    );
+    final publisher = _CapturePublisher();
+    final blobs = MemoryLanBlobStore();
+    final service = ActentTransportService(
+      deviceId: 'local',
+      identity: local,
+      repository: repository,
+      relay: ActentRelaySettings(
+        server: Uri.parse('https://relay.example'),
+        controlTopic: 'local-topic',
+        blobTopic: 'local-blob-topic',
+        token: 'tk_test',
+      ),
+      attachmentRoot: root,
+      relayPublisherFor: (_, _) => publisher,
+      lanBlobStoreFor: (_) => blobs,
+      blobStoreFor: (_, _) => const _FailingBlobStore(),
+    );
+    final message = ActentMessage(
+      id: 'message',
+      traceId: 'trace',
+      createdAt: DateTime.now().toUtc(),
+      source: const ActentSource(kind: 'test'),
+      content: ActentContent(
+        type: ActentContentType.file,
+        data: const {'name': 'payload'},
+      ),
+      attachments: [
+        ActentAttachment(
+          id: 'attachment',
+          name: 'payload',
+          mimeType: 'text/plain',
+          byteLength: file.lengthSync(),
+          handle: file.path,
+        ),
+      ],
+    );
+    final request = WorkRequest(
+      requestId: 'request',
+      message: message,
+      workId: 'work',
+      workRevision: 1,
+      sourceDeviceId: 'local',
+      targetDeviceId: 'remote',
+      createdAt: DateTime.now().toUtc(),
+      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+    );
+    await service.send(
+      recipientId: 'remote',
+      payload: {
+        'type': 'workRequest',
+        'schemaVersion': actentSchemaVersion,
+        'request': request.toJson(),
+      },
+    );
+    final decoded = await _decodePublishedPayloads(
+      publisher,
+      remote: remote,
+      senderPublicKey: local.publicKey,
+    );
+    final offer = decoded.firstWhere(
+      (payload) => payload['type'] == 'workRequest',
+    );
+    final transfers = offer['attachmentTransfers'] as List;
+    final transfer = Map<String, Object?>.from(transfers.single as Map);
+    final manifest = AttachmentManifest.fromJson(transfer['manifest']);
+    final transferKey = SecretKey(base64Url.decode(transfer['key'] as String));
+    final reassembler = AttachmentReassembler(manifest);
+    for (final payload in decoded) {
+      if (payload['type'] != 'attachmentChunkRef') continue;
+      final protocol = AttachmentProtocolMessage.fromJson(
+        payload['attachmentProtocol'],
       );
-      final decoded = await _decodePublishedPayloads(
-        publisher,
-        remote: remote,
-        senderPublicKey: local.publicKey,
+      final reference = protocol as AttachmentChunkReference;
+      reassembler.add(
+        const AttachmentChunkBinaryCodec().decode(
+          await blobs.get(reference.blob),
+          messageId: manifest.messageId,
+          attachmentId: manifest.attachmentId,
+        ),
       );
-      final offer = decoded.firstWhere(
-        (payload) => payload['type'] == 'workRequest',
-      );
-      final transfers = offer['attachmentTransfers'] as List;
-      final transfer = Map<String, Object?>.from(transfers.single as Map);
-      final manifest = AttachmentManifest.fromJson(transfer['manifest']);
-      final transferKey = SecretKey(
-        base64Url.decode(transfer['key'] as String),
-      );
-      final reassembler = AttachmentReassembler(manifest);
-      for (final payload in decoded) {
-        if (payload['type'] != 'attachmentChunk') continue;
-        reassembler.add(AttachmentChunk.fromJson(payload['chunk']));
-      }
-      expect(
-        utf8.decode(await reassembler.decryptAndAssemble(key: transferKey)),
-        'private attachment',
-      );
-      final decodedRequest = Map<String, Object?>.from(offer['request'] as Map);
-      final decodedMessage = Map<String, Object?>.from(
-        decodedRequest['message'] as Map,
-      );
-      final decodedPayload = Map<String, Object?>.from(
-        decodedMessage['payload'] as Map,
-      );
-      final decodedAttachment = Map<String, Object?>.from(
-        (decodedPayload['attachments'] as List).single as Map,
-      );
-      expect(decodedAttachment['handle'], startsWith('actent-transfer://'));
-    },
-  );
+    }
+    expect(
+      utf8.decode(await reassembler.decryptAndAssemble(key: transferKey)),
+      'private attachment',
+    );
+    final decodedRequest = Map<String, Object?>.from(offer['request'] as Map);
+    final decodedMessage = Map<String, Object?>.from(
+      decodedRequest['message'] as Map,
+    );
+    final decodedPayload = Map<String, Object?>.from(
+      decodedMessage['payload'] as Map,
+    );
+    final decodedAttachment = Map<String, Object?>.from(
+      (decodedPayload['attachments'] as List).single as Map,
+    );
+    expect(decodedAttachment['handle'], startsWith('actent-transfer://'));
+  });
 }
 
 class _CapturePublisher implements RelayPublisher {
@@ -231,14 +246,25 @@ class _CapturePublisher implements RelayPublisher {
   String? get body => bodies.isEmpty ? null : bodies.last;
 
   @override
-  Future<void> publish(
-    String topic,
-    String body, {
-    String? authorization,
-  }) async {
+  Future<void> publish(String topic, String body) async {
     this.topic = topic;
     bodies.add(body);
   }
+}
+
+class _FailingBlobStore implements BlobStore {
+  const _FailingBlobStore();
+
+  @override
+  Future<BlobReference> put({
+    required String channel,
+    required String objectId,
+    required Uint8List bytes,
+  }) => throw StateError('ntfy blob fallback should not be used');
+
+  @override
+  Future<Uint8List> get(BlobReference reference) =>
+      throw StateError('ntfy blob fallback should not be used');
 }
 
 Future<List<Map<String, Object?>>> _decodePublishedPayloads(

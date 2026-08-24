@@ -25,8 +25,9 @@ class DartloomApp extends StatefulWidget {
     this.deviceDisplayName,
     this.publicKey,
     this.relayTopic,
+    this.relayBlobTopic,
     this.relayServer,
-    this.relayAuthorizationConfigured = false,
+    this.relayTokenConfigured = false,
     this.onRelaySettingsChanged,
     this.lanHost,
     this.lanPort,
@@ -58,8 +59,9 @@ class DartloomApp extends StatefulWidget {
   final String? deviceDisplayName;
   final String? publicKey;
   final String? relayTopic;
+  final String? relayBlobTopic;
   final Uri? relayServer;
-  final bool relayAuthorizationConfigured;
+  final bool relayTokenConfigured;
   final Future<void> Function(Uri server, String? authorization)?
   onRelaySettingsChanged;
   final String? lanHost;
@@ -119,8 +121,9 @@ class _DartloomAppState extends State<DartloomApp> {
       deviceDisplayName: widget.deviceDisplayName,
       publicKey: widget.publicKey,
       relayTopic: widget.relayTopic,
+      relayBlobTopic: widget.relayBlobTopic,
       relayServer: widget.relayServer,
-      relayAuthorizationConfigured: widget.relayAuthorizationConfigured,
+      relayTokenConfigured: widget.relayTokenConfigured,
       onRelaySettingsChanged: widget.onRelaySettingsChanged,
       lanHost: widget.lanHost,
       lanPort: widget.lanPort,
