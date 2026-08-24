@@ -287,9 +287,10 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       pairingDiscovery: MdnsPairingDiscovery(
         serviceName: actentMdnsServiceName,
       ),
-      pairingHandshake: relay.token == null
-          ? null
-          : PairingRelayHandshake(server: relay.server, token: relay.token!),
+      pairingHandshake: PairingRelayHandshake(
+        server: relay.server,
+        token: relay.token,
+      ),
       attachmentRetention: attachmentRoot == null
           ? null
           : AttachmentRetentionManager(

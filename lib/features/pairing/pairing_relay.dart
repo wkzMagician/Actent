@@ -7,14 +7,14 @@ import 'pairing_relay_contracts.dart' as capability;
 class PairingRelayHandshake {
   PairingRelayHandshake({
     required this.server,
-    required this.token,
+    this.token,
     RelayPublisher? publisher,
     this.subscriptionFactory,
   }) : _publisher =
            publisher ??
            NtfyRelayPublisher(
              server: server,
-             credentials: NtfyCredentials(token),
+             credentials: token == null ? null : NtfyCredentials(token),
              timeout: const Duration(seconds: 15),
              maxAttempts: 3,
            ),
@@ -23,7 +23,7 @@ class PairingRelayHandshake {
            ((server, topic, authorization) => NtfyJsonSubscription(
              server: server,
              channel: topic,
-             credentials: NtfyCredentials(token),
+             credentials: token == null ? null : NtfyCredentials(token),
            )) {
     _delegate = capability.PairingRelayHandshake(
       server: server,
@@ -37,7 +37,7 @@ class PairingRelayHandshake {
   }
 
   final Uri server;
-  final String token;
+  final String? token;
   final NtfyJsonSubscription Function(Uri server, String topic, String? auth)?
   subscriptionFactory;
   final RelayPublisher _publisher;

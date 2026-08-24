@@ -43,7 +43,7 @@
   "languageChinese": "中文",
   "relaySettings": "Relay settings",
   "ntfyServerUrl": "ntfy server URL",
-  "authorizationEmptyToClear": "ntfy token (tk_..., empty to clear)",
+  "authorizationEmptyToClear": "ntfy token (optional; leave empty for anonymous access)",
   "cancel": "Cancel",
   "save": "Save",
   "invalidRelayUrl": "Relay URL is invalid.",

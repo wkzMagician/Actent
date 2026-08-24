@@ -359,7 +359,7 @@ abstract class AppLocalizations {
   /// No description provided for @authorizationEmptyToClear.
   ///
   /// In en, this message translates to:
-  /// **'ntfy token (tk_..., empty to clear)'**
+  /// **'ntfy token (optional; leave empty for anonymous access)'**
   String get authorizationEmptyToClear;
 
   /// No description provided for @cancel.

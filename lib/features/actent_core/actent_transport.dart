@@ -138,12 +138,16 @@ class ActentTransportService implements MessageConnection {
   final ActentLanServerConfig? lanServerConfig;
   final PacketConnection Function(Device device)? lanConnectionFor;
   final BlobStore Function(Device device)? lanBlobStoreFor;
-  final RelayPublisher Function(Uri server, String token)? relayPublisherFor;
-  final NtfyPacketSubscription Function(Uri server, String topic, String token)?
+  final RelayPublisher Function(Uri server, String? token)? relayPublisherFor;
+  final NtfyPacketSubscription Function(
+    Uri server,
+    String topic,
+    String? token,
+  )?
   subscriptionFor;
-  final NtfyPacketPoller Function(Uri server, String topic, String token)?
+  final NtfyPacketPoller Function(Uri server, String topic, String? token)?
   pollerFor;
-  final BlobStore Function(Uri server, String token)? blobStoreFor;
+  final BlobStore Function(Uri server, String? token)? blobStoreFor;
   final Future<Uint8List?> Function(String handle)? readAttachment;
   final Future<String> Function(
     String messageId,
@@ -169,7 +173,7 @@ class ActentTransportService implements MessageConnection {
   Timer? _relayReconnectTimer;
   Timer? _relayPollTimer;
   bool _relayPollInProgress = false;
-  String? _relayToken;
+  bool _relayActive = false;
   DateTime? _relayPollSince;
   final Map<String, _IncomingAttachmentTransfer> _incomingTransfers = {};
   final Map<String, Completer<Map<String, Set<int>>>> _resumeWaiters = {};
@@ -224,15 +228,13 @@ class ActentTransportService implements MessageConnection {
         (_) => unawaited(probePeers()),
       );
       final token = relay.token;
-      if (token != null) {
-        _relayToken = token;
-        _startRelaySubscription(token);
-        unawaited(_pollRelayCache(token));
-        _relayPollTimer = Timer.periodic(
-          relayPollInterval,
-          (_) => unawaited(_pollRelayCache(token)),
-        );
-      }
+      _relayActive = true;
+      _startRelaySubscription(token);
+      unawaited(_pollRelayCache(token));
+      _relayPollTimer = Timer.periodic(
+        relayPollInterval,
+        (_) => unawaited(_pollRelayCache(token)),
+      );
       unawaited(_resumeOutgoingTransfers());
     } on Object {
       _started = false;
@@ -242,7 +244,7 @@ class ActentTransportService implements MessageConnection {
       _relayReconnectTimer = null;
       _relayPollTimer?.cancel();
       _relayPollTimer = null;
-      _relayToken = null;
+      _relayActive = false;
       await _lanServer?.close();
       _lanServer = null;
       _router = null;
@@ -250,8 +252,8 @@ class ActentTransportService implements MessageConnection {
     }
   }
 
-  void _startRelaySubscription(String token) {
-    if (!_started || _relayToken != token) return;
+  void _startRelaySubscription(String? token) {
+    if (!_started || !_relayActive) return;
     _relayReconnectTimer?.cancel();
     _relayReconnectTimer = null;
     try {
@@ -260,7 +262,7 @@ class ActentTransportService implements MessageConnection {
           NtfyPacketSubscription(
             server: relay.server,
             channel: relay.controlTopic,
-            credentials: NtfyCredentials(token),
+            credentials: token == null ? null : NtfyCredentials(token),
           );
       _subscription = subscription.listen().listen(
         (packet) => unawaited(_receive(packet)),
@@ -273,8 +275,8 @@ class ActentTransportService implements MessageConnection {
     }
   }
 
-  void _scheduleRelayReconnect(String token) {
-    if (!_started || _relayToken != token) return;
+  void _scheduleRelayReconnect(String? token) {
+    if (!_started || !_relayActive) return;
     _relayReconnectTimer?.cancel();
     _relayReconnectTimer = Timer(
       relayReconnectDelay,
@@ -282,8 +284,8 @@ class ActentTransportService implements MessageConnection {
     );
   }
 
-  Future<void> _pollRelayCache(String token) async {
-    if (!_started || _relayToken != token || _relayPollInProgress) return;
+  Future<void> _pollRelayCache(String? token) async {
+    if (!_started || !_relayActive || _relayPollInProgress) return;
     _relayPollInProgress = true;
     final pollStartedAt = DateTime.now().toUtc();
     try {
@@ -292,13 +294,13 @@ class ActentTransportService implements MessageConnection {
           NtfyPacketPoller(
             server: relay.server,
             channel: relay.controlTopic,
-            credentials: NtfyCredentials(token),
+            credentials: token == null ? null : NtfyCredentials(token),
           );
       final cached = await poller.poll(
         since: _relayPollSince ?? pollStartedAt.subtract(seenPacketRetention),
       );
       for (final packet in cached) {
-        if (!_started || _relayToken != token) return;
+        if (!_started || !_relayActive) return;
         await _receive(packet);
       }
       // Overlap the successful cursor slightly so events on the exact second
@@ -429,9 +431,6 @@ class ActentTransportService implements MessageConnection {
       throw StateError('paired device has no relay inbox topic');
     }
     final token = relay.token;
-    if (token == null) {
-      throw StateError('ntfy token is not configured');
-    }
     final server = endpoint.relayServer ?? relay.server;
     final sender = RoutedPacketSender(
       lan: lanConnectionFor?.call(device) ?? _defaultLanConnection(device),
@@ -439,7 +438,7 @@ class ActentTransportService implements MessageConnection {
           relayPublisherFor?.call(server, token) ??
           NtfyRelayPublisher(
             server: server,
-            credentials: NtfyCredentials(token),
+            credentials: token == null ? null : NtfyCredentials(token),
           ),
       relayChannel: relayTopic,
     );
@@ -972,14 +971,15 @@ class ActentTransportService implements MessageConnection {
     await receiver.add(chunk);
   }
 
-  BlobStore _blobStore(Uri server, String token) =>
+  BlobStore _blobStore(Uri server, String? token) =>
       blobStoreFor?.call(server, token) ??
-      NtfyBlobStore(server: server, credentials: NtfyCredentials(token));
+      NtfyBlobStore(
+        server: server,
+        credentials: token == null ? null : NtfyCredentials(token),
+      );
 
   Future<Uint8List> _getNtfyBlob(BlobReference reference) {
-    final token = relay.token;
-    if (token == null) throw StateError('ntfy token is not configured');
-    return _blobStore(relay.server, token).get(reference);
+    return _blobStore(relay.server, relay.token).get(reference);
   }
 
   Future<BlobReference> _putAttachmentBlob(
@@ -1007,16 +1007,14 @@ class ActentTransportService implements MessageConnection {
         certificateSha256: endpoint.certificateSha256,
       );
     }
-    final token = relay.token;
-    final ntfyStore = token == null
-        ? null
-        : _blobStore(endpoint.relayServer ?? relay.server, token);
-    if (lanStore != null && ntfyStore != null) {
+    final ntfyStore = _blobStore(
+      endpoint.relayServer ?? relay.server,
+      relay.token,
+    );
+    if (lanStore != null) {
       return _FallbackBlobStore(lanStore, ntfyStore);
     }
-    return lanStore ??
-        ntfyStore ??
-        (throw StateError('no LAN or ntfy blob transport is configured'));
+    return ntfyStore;
   }
 
   Future<void> _commitIncomingAttachmentTransfer(
@@ -1152,7 +1150,7 @@ class ActentTransportService implements MessageConnection {
     _relayReconnectTimer = null;
     _relayPollTimer?.cancel();
     _relayPollTimer = null;
-    _relayToken = null;
+    _relayActive = false;
     _relayPollSince = null;
     await _subscription?.cancel();
     _subscription = null;

@@ -151,7 +151,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ntfyServerUrl => 'ntfy server URL';
 
   @override
-  String get authorizationEmptyToClear => 'ntfy token (tk_..., empty to clear)';
+  String get authorizationEmptyToClear =>
+      'ntfy token (optional; leave empty for anonymous access)';
 
   @override
   String get cancel => 'Cancel';

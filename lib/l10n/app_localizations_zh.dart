@@ -141,7 +141,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ntfyServerUrl => 'ntfy 服务器 URL';
 
   @override
-  String get authorizationEmptyToClear => 'ntfy Token（tk_...，留空可清除）';
+  String get authorizationEmptyToClear => 'ntfy Token（可选；留空使用匿名访问）';
 
   @override
   String get cancel => '取消';
