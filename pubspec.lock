@@ -99,6 +99,33 @@ packages:
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.1.0"
+  dartloom_external_input:
+    dependency: "direct main"
+    description:
+      path: "packages/dartloom_external_input"
+      ref: main
+      resolved-ref: "1b3d22c9d4b69f270bc3acfa159bf6c0add20511"
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
+    version: "0.1.0"
+  dartloom_external_input_android:
+    dependency: "direct main"
+    description:
+      path: "packages/dartloom_external_input_android"
+      ref: main
+      resolved-ref: "1b3d22c9d4b69f270bc3acfa159bf6c0add20511"
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
+    version: "0.1.0"
+  dartloom_external_input_ios:
+    dependency: "direct main"
+    description:
+      path: "packages/dartloom_external_input_ios"
+      ref: main
+      resolved-ref: "1b3d22c9d4b69f270bc3acfa159bf6c0add20511"
+      url: "https://github.com/wkzMagician/dartloom.git"
+    source: git
+    version: "0.1.0"
   dartloom_localization:
     dependency: "direct main"
     description:

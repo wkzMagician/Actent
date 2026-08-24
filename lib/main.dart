@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:dartloom_resident/dartloom_resident.dart';
 import 'package:dartloom_singleton/dartloom_singleton.dart';
+import 'package:dartloom_external_input_android/dartloom_external_input_android.dart';
+import 'package:dartloom_external_input_ios/dartloom_external_input_ios.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:dartloom_storage/dartloom_storage.dart';
 import 'package:dartloom_messaging_ntfy/dartloom_messaging_ntfy.dart';
 import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
@@ -18,6 +19,7 @@ import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
 import 'app/pairing_configuration.dart';
+import 'app/queued_external_input_service.dart';
 import 'app/device_display_name.dart';
 import 'features/actent_platform/work_input_file_picker.dart';
 import 'features/actent_core/attachment_retention.dart';
@@ -30,6 +32,7 @@ import 'features/pairing/pairing_relay.dart';
 import 'features/pairing/pairing.dart';
 import 'features/actent_core/secret_repository.dart';
 import 'features/actent_platform/android_share_bridge.dart';
+import 'features/share/actent_share_coordinator.dart';
 import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
@@ -58,7 +61,7 @@ Future<void> main([List<String> arguments = const []]) async {
           // The error was already presented and logging is best effort.
         }
       };
-      runApp(_StartupGate(initialFilePaths: arguments));
+      runApp(_StartupGate(externalArguments: arguments));
     },
     (error, stackTrace) {
       try {
@@ -109,38 +112,17 @@ Future<void> _disposeStartupResources({
   }
 }
 
-Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
+Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   final singleInstance = createSingleInstanceService();
-  final externalFilePaths = StreamController<List<String>>.broadcast();
-  final startupFilePaths = List<String>.from(initialFilePaths);
-  var externalFileListenerReady = false;
-  if (defaultTargetPlatform == TargetPlatform.macOS ||
-      defaultTargetPlatform == TargetPlatform.iOS) {
-    const openFilesChannel = MethodChannel('actent/open_files');
-    openFilesChannel.setMethodCallHandler((call) async {
-      if (call.method != 'openFiles') return false;
-      final values = call.arguments;
-      if (values is List) {
-        final paths = values.whereType<String>().toList();
-        if (externalFileListenerReady) {
-          externalFilePaths.add(paths);
-        } else {
-          startupFilePaths.addAll(paths);
-        }
-      }
-      return true;
-    });
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      try {
-        final pending = await openFilesChannel.invokeListMethod<String>(
-          'takePendingOpenFiles',
-        );
-        if (pending != null) startupFilePaths.addAll(pending);
-      } on MissingPluginException {
-        // Older native builds do not expose the cold-start handoff yet.
-      }
-    }
-  }
+  final argumentInputs = QueuedExternalInputService();
+  argumentInputs.addFilePaths(externalArguments);
+  final externalInputService = switch (defaultTargetPlatform) {
+    TargetPlatform.iOS => IosExternalInputService(
+      appGroupIdentifier: 'group.com.example.actent',
+    ),
+    TargetPlatform.android => AndroidExternalInputService(),
+    _ => argumentInputs,
+  };
   ObjectStore? objectStore;
   ActentTransportService? transport;
   ResidentService? resident;
@@ -323,19 +305,17 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
         ),
         _ => null,
       },
-      importWorkInputFiles: switch (defaultTargetPlatform) {
-        TargetPlatform.iOS ||
-        TargetPlatform.windows ||
-        TargetPlatform.linux ||
-        TargetPlatform.macOS => (paths) => importLocalWorkInputFiles(
-          paths: paths,
-          attachmentDirectory: attachmentRoot!.path,
-          deviceId: identity.deviceId,
-        ),
-        _ => null,
-      },
-      initialFilePaths: startupFilePaths,
-      externalFilePaths: externalFilePaths.stream,
+      externalInputService: externalInputService,
+      shareCoordinator: attachmentRoot == null
+          ? null
+          : ActentShareCoordinator(
+              deviceId: identity.deviceId,
+              importFiles: (paths) => importLocalWorkInputFiles(
+                paths: paths,
+                attachmentDirectory: attachmentRoot.path,
+                deviceId: identity.deviceId,
+              ),
+            ),
       peerConnectionStatuses: transport.peerConnectionStatuses,
       probePeerConnections: transport.probePeers,
       connectPeerConnection: transport.probePeer,
@@ -344,10 +324,9 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
           ? AndroidShareBridge()
           : null,
     );
-    externalFileListenerReady = true;
     await singleInstance?.configure(
       SingleInstanceConfiguration(
-        onArgs: (args) async => externalFilePaths.add(args),
+        onArgs: (args) async => argumentInputs.addFilePaths(args),
       ),
     );
     // Resident/tray setup is optional. Do not hold the first Flutter frame on
@@ -364,7 +343,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
             // Exit must remain responsive even if a network subscription is slow.
           }
           await singleInstance?.dispose();
-          await externalFilePaths.close();
+          await argumentInputs.dispose();
           await resident?.dispose();
           await activeObjectStore.close();
           return true;
@@ -381,7 +360,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
     );
     return application;
   } on Object {
-    await externalFilePaths.close();
+    await argumentInputs.dispose();
     await _disposeStartupResources(
       singleInstance: singleInstance,
       transport: transport,
@@ -420,9 +399,9 @@ Locale? _localeFromCode(String? code) {
 }
 
 class _StartupGate extends StatefulWidget {
-  const _StartupGate({this.initialFilePaths = const []});
+  const _StartupGate({this.externalArguments = const []});
 
-  final List<String> initialFilePaths;
+  final List<String> externalArguments;
 
   @override
   State<_StartupGate> createState() => _StartupGateState();
@@ -434,7 +413,7 @@ class _StartupGateState extends State<_StartupGate> {
   @override
   void initState() {
     super.initState();
-    _application = _createApplication(widget.initialFilePaths);
+    _application = _createApplication(widget.externalArguments);
   }
 
   @override

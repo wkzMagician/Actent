@@ -17,6 +17,11 @@ dependencies:
       url: https://github.com/wkzMagician/dartloom.git
       ref: main
       path: packages/dartloom_autostart
+  dartloom_external_input:
+    git:
+      url: https://github.com/wkzMagician/dartloom.git
+      ref: main
+      path: packages/dartloom_external_input
   dartloom_localization:
     git:
       url: https://github.com/wkzMagician/dartloom.git
@@ -74,6 +79,16 @@ dependencies:
       url: https://github.com/wkzMagician/dartloom.git
       ref: main
       path: packages/dartloom_autostart_launch_at_startup
+  dartloom_external_input_android:
+    git:
+      url: https://github.com/wkzMagician/dartloom.git
+      ref: main
+      path: packages/dartloom_external_input_android
+  dartloom_external_input_ios:
+    git:
+      url: https://github.com/wkzMagician/dartloom.git
+      ref: main
+      path: packages/dartloom_external_input_ios
   dartloom_localization_gen_l10n:
     git:
       url: https://github.com/wkzMagician/dartloom.git

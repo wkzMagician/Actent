@@ -1,15 +1,5 @@
 import Flutter
-import UIKit
 
-class SceneDelegate: FlutterSceneDelegate {
-
-  override func scene(
-    _ scene: UIScene,
-    openURLContexts URLContexts: Set<UIOpenURLContext>
-  ) {
-    for context in URLContexts {
-      AppDelegate.handleIncomingURL(context.url)
-    }
-  }
-
-}
+/// External input is consumed from Dartloom's App Group inbox when Flutter
+/// starts and whenever the application becomes active.
+class SceneDelegate: FlutterSceneDelegate {}

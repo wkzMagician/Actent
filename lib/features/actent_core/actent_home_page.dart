@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:dartloom_external_input/dartloom_external_input.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import '../actent_platform/android_share_bridge.dart';
 import '../pairing/pairing.dart';
 import '../pairing/lan_pairing.dart';
 import '../pairing/pairing_relay.dart';
+import '../share/actent_share_coordinator.dart';
 import '../work/desktop/desktop_script_runner.dart';
 import '../work/android/android_work_runner.dart';
 import '../work/work_bindings.dart';
@@ -54,9 +56,8 @@ class ActentHomePage extends StatefulWidget {
     this.router,
     this.queue,
     this.pickWorkInputFile,
-    this.importWorkInputFiles,
-    this.initialFilePaths = const [],
-    this.externalFilePaths,
+    this.externalInputService,
+    this.shareCoordinator,
     this.peerConnectionStatuses,
     this.probePeerConnections,
     this.connectPeerConnection,
@@ -93,10 +94,8 @@ class ActentHomePage extends StatefulWidget {
   final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
-  final Future<ActentMessage?> Function(List<String> paths)?
-  importWorkInputFiles;
-  final List<String> initialFilePaths;
-  final Stream<List<String>>? externalFilePaths;
+  final ExternalInputService? externalInputService;
+  final ActentShareCoordinator? shareCoordinator;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
   final Future<void> Function(String deviceId)? connectPeerConnection;
@@ -124,9 +123,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final Set<String> _connectingDeviceIds = {};
   String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
-  StreamSubscription<ActentMessage>? _shareSubscription;
+  StreamSubscription<ExternalInputBatch>? _externalInputSubscription;
   StreamSubscription<PairingAcceptance>? _pairingAcceptanceSubscription;
-  StreamSubscription<List<String>>? _externalFileSubscription;
   StreamSubscription<PeerConnectionStatus>? _peerConnectionSubscription;
   StreamSubscription<void>? _repositoryUpdateSubscription;
   LanPairingServer? _lanPairingServer;
@@ -180,9 +178,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
     super.initState();
     _retention = widget.initialAttachmentRetention;
     _packetDedupRetention = widget.initialPacketDedupRetention;
-    final bridge = widget.shareBridge;
-    if (bridge != null) {
-      _shareSubscription = bridge.messages.listen(_onSharedMessage);
+    final externalInputService = widget.externalInputService;
+    final shareCoordinator = widget.shareCoordinator;
+    if (externalInputService != null && shareCoordinator != null) {
+      _externalInputSubscription = externalInputService.inputs.listen(
+        _onExternalInput,
+      );
     }
     final repository = widget.repository;
     if (repository != null) {
@@ -197,9 +198,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
         }
       });
     }
-    _externalFileSubscription = widget.externalFilePaths?.listen(
-      _importExternalFiles,
-    );
     final probePeerConnections = widget.probePeerConnections;
     if (probePeerConnections != null) {
       unawaited(Future<void>.delayed(Duration.zero, probePeerConnections));
@@ -400,9 +398,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       }
       await queue.restorePending(works);
     }
-    if (widget.initialFilePaths.isNotEmpty && mounted) {
-      await _importExternalFiles(widget.initialFilePaths);
-    }
+    await _consumePendingExternalInputs();
     _repositoryDataReady = true;
     final pendingMessages = List<ActentMessage>.from(_pendingSharedMessages);
     _pendingSharedMessages.clear();
@@ -411,12 +407,29 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
   }
 
-  Future<void> _importExternalFiles(List<String> paths) async {
-    final importer = widget.importWorkInputFiles;
-    if (importer == null) return;
+  Future<void> _consumePendingExternalInputs() async {
+    final service = widget.externalInputService;
+    if (service == null) return;
     try {
-      final message = await importer(paths);
-      if (message != null) await _onSharedMessage(message);
+      for (final batch in await service.takePending()) {
+        await _onExternalInput(batch);
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.fileSelectionFailed(error.toString()))),
+      );
+    }
+  }
+
+  Future<void> _onExternalInput(ExternalInputBatch batch) async {
+    final coordinator = widget.shareCoordinator;
+    if (coordinator == null) return;
+    try {
+      for (final message in await coordinator.handle(batch)) {
+        await _onSharedMessage(message);
+      }
     } on Object catch (error) {
       if (!mounted) return;
       final l10n = AppLocalizations.of(context)!;
@@ -438,9 +451,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   @override
   void dispose() {
-    _shareSubscription?.cancel();
+    _externalInputSubscription?.cancel();
     _pairingAcceptanceSubscription?.cancel();
-    _externalFileSubscription?.cancel();
     _peerConnectionSubscription?.cancel();
     _repositoryUpdateSubscription?.cancel();
     unawaited(_closeLanPairing());

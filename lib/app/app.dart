@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dartloom_pairing/qr_adapters.dart';
+import 'package:dartloom_external_input/dartloom_external_input.dart';
 
 import '../l10n/app_localizations.dart';
 import '../features/actent_core/actent_store.dart';
@@ -12,6 +13,7 @@ import '../features/pairing/pairing_relay.dart';
 import '../features/actent_core/attachment_retention.dart';
 import '../features/actent_platform/android_share_bridge.dart';
 import '../features/actent_core/actent_models.dart';
+import '../features/share/actent_share_coordinator.dart';
 import '../features/work/desktop/desktop_script_runner.dart';
 import '../features/work/work_runner.dart';
 import 'pairing_qr_presenter.dart';
@@ -44,9 +46,8 @@ class DartloomApp extends StatefulWidget {
     this.router,
     this.queue,
     this.pickWorkInputFile,
-    this.importWorkInputFiles,
-    this.initialFilePaths = const [],
-    this.externalFilePaths,
+    this.externalInputService,
+    this.shareCoordinator,
     this.peerConnectionStatuses,
     this.probePeerConnections,
     this.connectPeerConnection,
@@ -81,10 +82,8 @@ class DartloomApp extends StatefulWidget {
   final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
-  final Future<ActentMessage?> Function(List<String> paths)?
-  importWorkInputFiles;
-  final List<String> initialFilePaths;
-  final Stream<List<String>>? externalFilePaths;
+  final ExternalInputService? externalInputService;
+  final ActentShareCoordinator? shareCoordinator;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
   final Future<void> Function(String deviceId)? connectPeerConnection;
@@ -141,9 +140,8 @@ class _DartloomAppState extends State<DartloomApp> {
       router: widget.router,
       queue: widget.queue,
       pickWorkInputFile: widget.pickWorkInputFile,
-      importWorkInputFiles: widget.importWorkInputFiles,
-      initialFilePaths: widget.initialFilePaths,
-      externalFilePaths: widget.externalFilePaths,
+      externalInputService: widget.externalInputService,
+      shareCoordinator: widget.shareCoordinator,
       peerConnectionStatuses: widget.peerConnectionStatuses,
       probePeerConnections: widget.probePeerConnections,
       connectPeerConnection: widget.connectPeerConnection,

@@ -7,6 +7,9 @@ platforms:
   - web
 
 packages:
+  - dartloom_external_input
+  - dartloom_external_input_ios
+  - dartloom_external_input_android
   - dartloom_settings
   - dartloom_settings_shared_preferences
   - dartloom_settings_secure_storage

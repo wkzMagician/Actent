@@ -4,18 +4,12 @@ import '../actent_core/actent_models.dart';
 import '../work/android/android_work_runner.dart';
 
 const _channelName = 'actent/android_share';
-const _eventChannelName = 'actent/android_share_events';
 
 class AndroidShareBridge {
-  AndroidShareBridge({EventChannel? events, MethodChannel? methods})
-    : _events = events ?? const EventChannel(_eventChannelName),
-      _methods = methods ?? const MethodChannel(_channelName);
+  AndroidShareBridge({MethodChannel? methods})
+    : _methods = methods ?? const MethodChannel(_channelName);
 
-  final EventChannel _events;
   final MethodChannel _methods;
-
-  Stream<ActentMessage> get messages =>
-      _events.receiveBroadcastStream().map(ActentMessage.fromJson);
 
   Future<String> createContentUri(ActentAttachment attachment) async {
     final value = await _methods.invokeMethod<String>(
