@@ -452,6 +452,24 @@ abstract class AppLocalizations {
   /// **'Checking connection'**
   String get deviceConnectionChecking;
 
+  /// No description provided for @connect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get connect;
+
+  /// No description provided for @connecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get connecting;
+
+  /// No description provided for @connectionFailedWithError.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection failed: {error}'**
+  String connectionFailedWithError(Object error);
+
   /// No description provided for @thisDevice.
   ///
   /// In en, this message translates to:

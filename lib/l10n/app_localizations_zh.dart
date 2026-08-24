@@ -192,6 +192,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnectionChecking => '正在检查连接';
 
   @override
+  String get connect => '连接';
+
+  @override
+  String get connecting => '正在连接…';
+
+  @override
+  String connectionFailedWithError(Object error) {
+    return '连接失败：$error';
+  }
+
+  @override
   String get thisDevice => '本设备';
 
   @override

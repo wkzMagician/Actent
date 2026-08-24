@@ -15,6 +15,8 @@ class PairingRelayHandshake {
            NtfyRelayPublisher(
              server: server,
              credentials: NtfyCredentials(token),
+             timeout: const Duration(seconds: 15),
+             maxAttempts: 3,
            ),
        _subscriptionFactory =
            subscriptionFactory ??

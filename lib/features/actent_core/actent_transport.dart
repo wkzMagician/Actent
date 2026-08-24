@@ -568,37 +568,51 @@ class ActentTransportService implements MessageConnection {
 
   Future<void> probePeers() async {
     if (!_started) return;
-    final now = DateTime.now().toUtc();
     final peers = (await repository.listDevices()).where(
       (device) => device.authorized && device.id != deviceId,
     );
     for (final peer in peers) {
-      final current = _peerStatuses[peer.id];
-      final lastSeen = current?.lastSeen;
-      if (current == null ||
-          (lastSeen != null && now.difference(lastSeen) > presenceTimeout)) {
-        _setPeerStatus(
-          PeerConnectionStatus(
-            deviceId: peer.id,
-            state: PeerConnectionState.disconnected,
-            lastSeen: lastSeen,
-          ),
-        );
-      }
       try {
-        await _sendTransportPayload(peer.id, {
-          'type': 'presencePing',
-          'schemaVersion': actentSchemaVersion,
-        });
+        await probePeer(peer.id);
       } on Object {
-        _setPeerStatus(
-          PeerConnectionStatus(
-            deviceId: peer.id,
-            state: PeerConnectionState.disconnected,
-            lastSeen: lastSeen,
-          ),
-        );
+        // The status update is handled by probePeer; continue probing others.
       }
+    }
+  }
+
+  Future<void> probePeer(String peerDeviceId) async {
+    if (!_started) throw StateError('transport is not running');
+    final peer = await repository.getDevice(peerDeviceId);
+    if (peer == null || !peer.authorized || peer.id == deviceId) {
+      throw StateError('paired device is unavailable: $peerDeviceId');
+    }
+    final current = _peerStatuses[peer.id];
+    final lastSeen = current?.lastSeen;
+    final now = DateTime.now().toUtc();
+    if (current == null ||
+        (lastSeen != null && now.difference(lastSeen) > presenceTimeout)) {
+      _setPeerStatus(
+        PeerConnectionStatus(
+          deviceId: peer.id,
+          state: PeerConnectionState.disconnected,
+          lastSeen: lastSeen,
+        ),
+      );
+    }
+    try {
+      await _sendTransportPayload(peer.id, {
+        'type': 'presencePing',
+        'schemaVersion': actentSchemaVersion,
+      });
+    } on Object {
+      _setPeerStatus(
+        PeerConnectionStatus(
+          deviceId: peer.id,
+          state: PeerConnectionState.disconnected,
+          lastSeen: lastSeen,
+        ),
+      );
+      rethrow;
     }
   }
 

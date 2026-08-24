@@ -205,6 +205,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnectionChecking => 'Checking connection';
 
   @override
+  String get connect => 'Connect';
+
+  @override
+  String get connecting => 'Connecting…';
+
+  @override
+  String connectionFailedWithError(Object error) {
+    return 'Connection failed: $error';
+  }
+
+  @override
   String get thisDevice => 'This device';
 
   @override

@@ -49,6 +49,7 @@ class DartloomApp extends StatefulWidget {
     this.externalFilePaths,
     this.peerConnectionStatuses,
     this.probePeerConnections,
+    this.connectPeerConnection,
     this.locale,
     this.onLocaleChanged,
   });
@@ -86,6 +87,7 @@ class DartloomApp extends StatefulWidget {
   final Stream<List<String>>? externalFilePaths;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
+  final Future<void> Function(String deviceId)? connectPeerConnection;
   final Locale? locale;
   final Future<void> Function(Locale locale)? onLocaleChanged;
 
@@ -144,6 +146,7 @@ class _DartloomAppState extends State<DartloomApp> {
       externalFilePaths: widget.externalFilePaths,
       peerConnectionStatuses: widget.peerConnectionStatuses,
       probePeerConnections: widget.probePeerConnections,
+      connectPeerConnection: widget.connectPeerConnection,
       onLocaleChanged: _changeLocale,
       canEditWorks:
           kIsWeb ||

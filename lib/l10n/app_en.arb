@@ -59,6 +59,10 @@
   ,"deviceConnected": "Connected"
   ,"deviceDisconnected": "Not connected"
   ,"deviceConnectionChecking": "Checking connection"
+  ,"connect": "Connect"
+  ,"connecting": "Connecting…"
+  ,"connectionFailedWithError": "Connection failed: {error}"
+  ,"@connectionFailedWithError": {"placeholders": {"error": {}}}
   ,"thisDevice": "This device"
   ,"remoteDevice": "Remote device"
   ,"nullWork": "Null — store locally"

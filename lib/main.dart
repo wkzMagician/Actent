@@ -332,6 +332,7 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       externalFilePaths: externalFilePaths.stream,
       peerConnectionStatuses: transport.peerConnectionStatuses,
       probePeerConnections: transport.probePeers,
+      connectPeerConnection: transport.probePeer,
       desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
       shareBridge: defaultTargetPlatform == TargetPlatform.android
           ? AndroidShareBridge()

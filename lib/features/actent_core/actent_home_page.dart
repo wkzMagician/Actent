@@ -59,6 +59,7 @@ class ActentHomePage extends StatefulWidget {
     this.externalFilePaths,
     this.peerConnectionStatuses,
     this.probePeerConnections,
+    this.connectPeerConnection,
     this.showPairingQr,
     this.scanPairingQr,
     this.onLocaleChanged,
@@ -98,6 +99,7 @@ class ActentHomePage extends StatefulWidget {
   final Stream<List<String>>? externalFilePaths;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
+  final Future<void> Function(String deviceId)? connectPeerConnection;
   final Future<void> Function(BuildContext context, String invite)?
   showPairingQr;
   final Future<String?> Function(BuildContext context)? scanPairingQr;
@@ -118,6 +120,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final Map<String, WorkReceipt> _receiptsByRequest = {};
   String? _selectedActivityId;
   final Map<String, PeerConnectionStatus> _peerConnectionStatusByDevice = {};
+  final Set<String> _connectingDeviceIds = {};
   String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ActentMessage>? _shareSubscription;
@@ -127,6 +130,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   StreamSubscription<void>? _repositoryUpdateSubscription;
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
+  bool _pairingUiActive = false;
   WorkQueueCoordinator? _queue;
   AttachmentRetention _retention = AttachmentRetention.sevenDays;
   late Duration _packetDedupRetention;
@@ -900,32 +904,24 @@ class _ActentHomePageState extends State<ActentHomePage> {
                 '${workflow.steps.length} ${l10n.workflowSteps} · '
                 '${workflow.enabled ? l10n.workflowReady : l10n.workflowInvalid}',
               ),
-              trailing: _isLocalWorkflow(workflow)
-                  ? PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          await _showAddWorkflow(existing: workflow);
-                        } else if (value == 'delete') {
-                          await _deleteWorkflow(workflow);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(value: 'edit', child: Text(l10n.edit)),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Text(l10n.delete),
-                        ),
-                      ],
-                    )
-                  : null,
+              trailing: PopupMenuButton<String>(
+                onSelected: (value) async {
+                  if (value == 'edit') {
+                    await _showAddWorkflow(existing: workflow);
+                  } else if (value == 'delete') {
+                    await _deleteWorkflow(workflow);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(value: 'edit', child: Text(l10n.edit)),
+                  PopupMenuItem(value: 'delete', child: Text(l10n.delete)),
+                ],
+              ),
             ),
           ),
       ],
     );
   }
-
-  bool _isLocalWorkflow(Workflow workflow) =>
-      workflow.ownerDeviceId == (widget.deviceId ?? 'local-device');
 
   Future<void> _deleteWorkflow(Workflow workflow) async {
     final repository = widget.repository;
@@ -2184,6 +2180,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   Widget _deviceCard(Device device, AppLocalizations l10n) {
     final status = _peerConnectionStatusByDevice[device.id];
     final connected = status?.state == PeerConnectionState.connected;
+    final connecting = _connectingDeviceIds.contains(device.id);
     final statusLabel = status == null
         ? l10n.deviceConnectionChecking
         : connected
@@ -2199,13 +2196,56 @@ class _ActentHomePageState extends State<ActentHomePage> {
         subtitle: Text(
           '$statusLabel · ${device.platform} · ${_shortDeviceId(device.id)}',
         ),
-        trailing: Icon(
-          device.authorized ? Icons.verified_outlined : Icons.block,
-          color: device.authorized ? Colors.green : Colors.red,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!connected && device.authorized)
+              TextButton.icon(
+                onPressed: connecting ? null : () => _connectDevice(device),
+                icon: connecting
+                    ? const SizedBox.square(
+                        dimension: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.link),
+                label: Text(connecting ? l10n.connecting : l10n.connect),
+              ),
+            Icon(
+              device.authorized ? Icons.verified_outlined : Icons.block,
+              color: device.authorized ? Colors.green : Colors.red,
+            ),
+            IconButton(
+              tooltip: l10n.remove,
+              onPressed: () => _unpairDevice(device),
+              icon: const Icon(Icons.delete_outline),
+            ),
+          ],
         ),
-        onTap: () => _unpairDevice(device),
       ),
     );
+  }
+
+  Future<void> _connectDevice(Device device) async {
+    if (_connectingDeviceIds.contains(device.id)) return;
+    setState(() => _connectingDeviceIds.add(device.id));
+    try {
+      final connect = widget.connectPeerConnection;
+      if (connect != null) {
+        await connect(device.id);
+      } else {
+        await widget.probePeerConnections?.call();
+      }
+    } on Object catch (error) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.connectionFailedWithError(error.toString())),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _connectingDeviceIds.remove(device.id));
+    }
   }
 
   String _deviceLabel(Device device, AppLocalizations l10n) {
@@ -2354,7 +2394,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
         'discovery result has no pairing endpoint',
       );
     }
-    final client = LanPairingClient(uriScheme: actentPairingUriScheme);
+    final client = LanPairingClient(
+      uriScheme: actentPairingUriScheme,
+      timeout: const Duration(minutes: 2),
+    );
     final invite = await client.fetchInvite(host: host, port: port);
     if (advertisement.fingerprint.isNotEmpty &&
         _publicKeyFingerprint(invite.issuerPublicKey) !=
@@ -2440,6 +2483,22 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _showPairingActions() async {
+    if (_pairingUiActive) return;
+    _pairingUiActive = true;
+    try {
+      await _openPairingActions();
+    } on Object catch (error) {
+      if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.pairingFailedWithError(error.toString()))),
+      );
+    } finally {
+      _pairingUiActive = false;
+    }
+  }
+
+  Future<void> _openPairingActions() async {
     await _closeLanPairing();
     final pairingHandshake = widget.pairingHandshake;
     final lanConfig = widget.lanServerConfig;
@@ -2449,6 +2508,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       lanServer = LanPairingServer(
         securityContext: lanConfig.securityContext,
         host: lanConfig.bindAddress,
+        requestTimeout: const Duration(minutes: 2),
         onRequest: (request) {
           final session = activeSession;
           if (session == null) {
@@ -2457,8 +2517,11 @@ class _ActentHomePageState extends State<ActentHomePage> {
           return LanPairingRequestHandler(
             invite: session.invite,
             issuerDeviceId: widget.deviceId ?? 'local-device',
-            onAccepted: (acceptance) =>
-                _completeIssuerPairing(session, acceptance),
+            onAccepted: (acceptance) => _completeIssuerPairing(
+              session,
+              acceptance,
+              sendRelayConfirmation: false,
+            ),
           ).handle(request);
         },
       );
@@ -2505,13 +2568,22 @@ class _ActentHomePageState extends State<ActentHomePage> {
         rethrow;
       }
     }
-    await _pairingAcceptanceSubscription?.cancel();
+    final previousAcceptanceSubscription = _pairingAcceptanceSubscription;
+    _pairingAcceptanceSubscription = null;
+    if (previousAcceptanceSubscription != null) {
+      unawaited(previousAcceptanceSubscription.cancel());
+    }
     if (pairingHandshake != null) {
       _pairingAcceptanceSubscription = pairingHandshake
           .listenForAcceptance(session.invite)
           .listen(
-            (acceptance) =>
-                unawaited(_completeIssuerPairing(session, acceptance)),
+            (acceptance) => unawaited(
+              _completeIssuerPairing(
+                session,
+                acceptance,
+                sendRelayConfirmation: true,
+              ),
+            ),
           );
     }
     final showQr = widget.showPairingQr;
@@ -2640,6 +2712,49 @@ class _ActentHomePageState extends State<ActentHomePage> {
       );
     session.confirm(code);
     final pairingHandshake = widget.pairingHandshake;
+    final pairingHost = invite.issuerLanHost;
+    final pairingPort = invite.issuerPairingLanPort;
+    if (pairingHost != null &&
+        pairingHost.isNotEmpty &&
+        pairingPort != null &&
+        pairingPort > 0) {
+      try {
+        final client = LanPairingClient(
+          uriScheme: actentPairingUriScheme,
+          timeout: const Duration(minutes: 2),
+        );
+        await client.sendAcceptance(
+          invite: invite,
+          host: pairingHost,
+          port: pairingPort,
+          deviceId: widget.deviceId ?? 'local-device',
+          publicKey: widget.publicKey ?? 'local-public-key',
+          displayName: widget.deviceDisplayName ?? 'Actent device',
+          platform: 'paired',
+          relayUrl:
+              pairingHandshake?.server.toString() ??
+              widget.relayServer?.toString() ??
+              invite.relayUrl,
+          controlTopic: widget.relayTopic ?? '',
+          blobTopic: widget.relayBlobTopic ?? '',
+          lanHost: widget.lanHost,
+          lanPort: widget.lanPort,
+          serverCertificateSha256: invite.issuerCertificateSha256,
+          certificateSha256: widget.lanCertificateSha256,
+        );
+        await _savePairedDevice(
+          invite,
+          authorized: true,
+          controlTopic: invite.issuerControlTopic,
+          blobTopic: invite.issuerBlobTopic,
+        );
+        return;
+      } on Object {
+        if (pairingHandshake == null) rethrow;
+        // The direct endpoint may be unreachable after changing networks.
+        // Relay pairing remains the bounded fallback.
+      }
+    }
     if (pairingHandshake != null) {
       final acceptance = await pairingHandshake.sendAcceptance(
         invite: invite,
@@ -2673,8 +2788,9 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<bool> _completeIssuerPairing(
     PairingSession session,
-    PairingAcceptance acceptance,
-  ) async {
+    PairingAcceptance acceptance, {
+    required bool sendRelayConfirmation,
+  }) async {
     final l10n = AppLocalizations.of(context)!;
     if (!acceptance.verify(session.invite) || session.isTerminal) return false;
     try {
@@ -2706,7 +2822,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ),
       );
       final handshake = widget.pairingHandshake;
-      if (handshake != null) {
+      if (sendRelayConfirmation && handshake != null) {
         await handshake.sendConfirmation(
           acceptance: acceptance,
           issuerDeviceId: widget.deviceId ?? 'local-device',

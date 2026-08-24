@@ -59,6 +59,10 @@
   ,"deviceConnected": "已连接"
   ,"deviceDisconnected": "未连接"
   ,"deviceConnectionChecking": "正在检查连接"
+  ,"connect": "连接"
+  ,"connecting": "正在连接…"
+  ,"connectionFailedWithError": "连接失败：{error}"
+  ,"@connectionFailedWithError": {"placeholders": {"error": {}}}
   ,"thisDevice": "本设备"
   ,"remoteDevice": "远程设备"
   ,"nullWork": "空任务 — 保存在本地"

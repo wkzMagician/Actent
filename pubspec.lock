@@ -158,7 +158,7 @@ packages:
     description:
       path: "packages/dartloom_messaging_ntfy"
       ref: main
-      resolved-ref: ff31cc6bfc9d29b0659057bcbbd1fdbf99ec201c
+      resolved-ref: "3ba3c1cebb69dfc4434fd5c21a29e700cffc98ed"
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
@@ -167,7 +167,7 @@ packages:
     description:
       path: "packages/dartloom_pairing"
       ref: main
-      resolved-ref: ff31cc6bfc9d29b0659057bcbbd1fdbf99ec201c
+      resolved-ref: "3ba3c1cebb69dfc4434fd5c21a29e700cffc98ed"
       url: "https://github.com/wkzMagician/dartloom.git"
     source: git
     version: "0.2.0"
