@@ -112,7 +112,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final List<ActentMessage> _messages = [];
   final List<Work> _works = [];
   final List<Workflow> _workflows = [];
-  final List<WorkflowExecution> _workflowExecutions = [];
   final List<Device> _devices = [];
   final Map<String, _ActivityStatus> _messageStatuses = {};
   final Map<String, WorkRequest> _latestRequestsByMessage = {};
@@ -207,7 +206,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final messages = await repository.listMessages();
     var works = await repository.listWorks();
     final workflows = await repository.listWorkflows();
-    final workflowExecutions = await repository.listWorkflowExecutions();
     final localDeviceId = widget.deviceId ?? 'local-device';
     final localNullId = 'null-$localDeviceId';
     var localCatalogChanged = false;
@@ -302,9 +300,6 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _workflows
         ..clear()
         ..addAll(workflows);
-      _workflowExecutions
-        ..clear()
-        ..addAll(workflowExecutions);
       _devices
         ..clear()
         ..addAll(devices);
@@ -884,7 +879,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Widget _workflowsPage(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    if (_workflows.isEmpty && _workflowExecutions.isEmpty) {
+    if (_workflows.isEmpty) {
       return _emptyPage(_pages(context)[2]);
     }
     return ListView(
@@ -908,15 +903,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
               trailing: _isLocalWorkflow(workflow)
                   ? PopupMenuButton<String>(
                       onSelected: (value) async {
-                        if (value == 'delete') {
-                          final repository = widget.repository;
-                          if (repository == null) return;
-                          await repository.deleteWorkflow(workflow.id);
-                          await _publishCatalogChanges();
-                          await _loadRepositoryData(repository);
+                        if (value == 'edit') {
+                          await _showAddWorkflow(existing: workflow);
+                        } else if (value == 'delete') {
+                          await _deleteWorkflow(workflow);
                         }
                       },
                       itemBuilder: (context) => [
+                        PopupMenuItem(value: 'edit', child: Text(l10n.edit)),
                         PopupMenuItem(
                           value: 'delete',
                           child: Text(l10n.delete),
@@ -926,49 +920,39 @@ class _ActentHomePageState extends State<ActentHomePage> {
                   : null,
             ),
           ),
-        for (final execution in _workflowExecutions.reversed)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.history_outlined),
-              title: Text(
-                _workflows
-                        .where(
-                          (workflow) => workflow.id == execution.workflowId,
-                        )
-                        .firstOrNull
-                        ?.name ??
-                    execution.workflowId,
-              ),
-              subtitle: Text(
-                '${execution.status.value} · step ${execution.currentStepIndex + 1}',
-              ),
-              trailing: execution.status == WorkflowExecutionStatus.failed
-                  ? TextButton(
-                      onPressed: () => _continueWorkflow(execution),
-                      child: Text(l10n.continueLabel),
-                    )
-                  : null,
-            ),
-          ),
       ],
     );
   }
 
-  Future<void> _continueWorkflow(WorkflowExecution execution) async {
-    final router = widget.router;
-    final repository = widget.repository;
-    if (router == null || repository == null) return;
-    final workflow = await repository.getWorkflow(execution.workflowId);
-    if (workflow == null) return;
-    final updated = await router.continueWorkflow(workflow, execution);
-    await _loadRepositoryData(repository);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(updated.status.value)));
-  }
-
   bool _isLocalWorkflow(Workflow workflow) =>
       workflow.ownerDeviceId == (widget.deviceId ?? 'local-device');
+
+  Future<void> _deleteWorkflow(Workflow workflow) async {
+    final repository = widget.repository;
+    if (repository == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.delete),
+        content: Text(workflow.name),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.cancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await repository.deleteWorkflow(workflow.id);
+    await _publishCatalogChanges();
+    await _loadRepositoryData(repository);
+  }
 
   Future<void> _runWorkflow(Workflow workflow) async {
     final router = widget.router;
@@ -1026,7 +1010,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
   }
 
-  Future<void> _showAddWorkflow() async {
+  Future<void> _showAddWorkflow({Workflow? existing}) async {
     final repository = widget.repository;
     if (repository == null) return;
     final l10n = AppLocalizations.of(context)!;
@@ -1035,12 +1019,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final result = await showDialog<(String, List<WorkflowStep>)>(
       context: context,
       builder: (dialogContext) {
-        final nameController = TextEditingController();
-        final steps = <WorkflowStep>[];
+        final nameController = TextEditingController(text: existing?.name);
+        final steps = [...?existing?.steps];
         String? selectedWorkId;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
-            title: Text(l10n.addWorkflow),
+            title: Text(existing == null ? l10n.addWorkflow : l10n.edit),
             content: SizedBox(
               width: 480,
               child: Column(
@@ -1147,12 +1131,15 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final now = DateTime.now().toUtc();
     await repository.saveWorkflow(
       Workflow(
-        id: 'workflow-${now.microsecondsSinceEpoch}',
-        revision: 1,
+        id: existing?.id ?? 'workflow-${now.microsecondsSinceEpoch}',
+        revision: (existing?.revision ?? 0) + 1,
         name: result.$1,
-        ownerDeviceId: widget.deviceId ?? 'local-device',
+        ownerDeviceId:
+            existing?.ownerDeviceId ?? (widget.deviceId ?? 'local-device'),
         steps: result.$2,
-        acceptedContentTypes: ActentContentType.values.toSet(),
+        acceptedContentTypes:
+            existing?.acceptedContentTypes ?? ActentContentType.values.toSet(),
+        enabled: existing?.enabled ?? true,
       ),
     );
     await _publishCatalogChanges();
