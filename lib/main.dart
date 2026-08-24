@@ -5,6 +5,7 @@ import 'package:dartloom_singleton/dartloom_singleton.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:dartloom_storage/dartloom_storage.dart';
 import 'package:dartloom_messaging_ntfy/dartloom_messaging_ntfy.dart';
 import 'package:dartloom_settings_secure_storage/dartloom_settings_secure_storage.dart';
@@ -147,6 +148,13 @@ Future<DartloomApp> _createApplication(List<String> initialFilePaths) async {
       );
     }
     final appSettings = SharedPreferencesSettingsStore();
+    const keychainCleanupMarker = 'actent.debug.keychainCleared.v1';
+    if (!kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.iOS &&
+        await appSettings.read(keychainCleanupMarker) != true) {
+      await const FlutterSecureStorage().deleteAll();
+      await appSettings.write(keychainCleanupMarker, true);
+    }
     final secretSettings = const SecureSettingsStore();
     final openedObjectStore = await _startupStep(
       openActentObjectStore(),
