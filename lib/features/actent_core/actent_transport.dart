@@ -111,6 +111,8 @@ class ActentTransportService implements MessageConnection {
     this.writeAttachment,
     this.presenceInterval = const Duration(seconds: 30),
     this.presenceTimeout = const Duration(seconds: 75),
+    this.relayReconnectDelay = const Duration(seconds: 5),
+    this.relayPollInterval = const Duration(seconds: 30),
     ActentTransportStateStore? stateStore,
   }) : _seenPackets =
            seenPackets ?? SeenPacketStore(retention: seenPacketRetention),
@@ -153,6 +155,8 @@ class ActentTransportService implements MessageConnection {
   final ActentTransportStateStore _stateStore;
   final Duration presenceInterval;
   final Duration presenceTimeout;
+  final Duration relayReconnectDelay;
+  final Duration relayPollInterval;
   final StreamController<PeerConnectionStatus> _peerConnectionStatuses =
       StreamController<PeerConnectionStatus>.broadcast();
   final Map<String, PeerConnectionStatus> _peerStatuses = {};
@@ -162,6 +166,11 @@ class ActentTransportService implements MessageConnection {
   LanTlsPacketServer? _lanServer;
   bool _started = false;
   Timer? _presenceTimer;
+  Timer? _relayReconnectTimer;
+  Timer? _relayPollTimer;
+  bool _relayPollInProgress = false;
+  String? _relayToken;
+  DateTime? _relayPollSince;
   final Map<String, _IncomingAttachmentTransfer> _incomingTransfers = {};
   final Map<String, Completer<Map<String, Set<int>>>> _resumeWaiters = {};
   final Set<String> _activeOutgoingTransfers = <String>{};
@@ -198,58 +207,108 @@ class ActentTransportService implements MessageConnection {
         await server.start();
         _lanServer = server;
       } on Object {
-        _router = null;
-        rethrow;
+        // LAN is optional. A bind or adapter failure must not prevent the
+        // local application and relay transport from starting.
+        try {
+          await server.close();
+        } on Object {
+          // A server that never bound may also reject close.
+        }
       }
     }
     await _restoreIncomingTransfers();
     try {
-      final token = relay.token;
-      if (token != null) {
-        final subscription =
-            subscriptionFor?.call(relay.server, relay.controlTopic, token) ??
-            NtfyPacketSubscription(
-              server: relay.server,
-              channel: relay.controlTopic,
-              credentials: NtfyCredentials(token),
-            );
-        _subscription = subscription.listen().listen(
-          (packet) => unawaited(_receive(packet)),
-          onError: (_) {
-            // Relay streams are best effort. Startup catch-up and durable
-            // transfer state recover delivery after reconnect.
-          },
-        );
-        try {
-          final poller =
-              pollerFor?.call(relay.server, relay.controlTopic, token) ??
-              NtfyPacketPoller(
-                server: relay.server,
-                channel: relay.controlTopic,
-                credentials: NtfyCredentials(token),
-              );
-          final cached = await poller.poll(
-            since: DateTime.now().toUtc().subtract(seenPacketRetention),
-          );
-          for (final packet in cached) {
-            await _receive(packet);
-          }
-        } on Object {
-          // A failed cache poll must not prevent the live subscription from
-          // starting. The next launch retries the same seven-day window.
-        }
-      }
       _started = true;
       _presenceTimer = Timer.periodic(
         presenceInterval,
         (_) => unawaited(probePeers()),
       );
+      final token = relay.token;
+      if (token != null) {
+        _relayToken = token;
+        _startRelaySubscription(token);
+        unawaited(_pollRelayCache(token));
+        _relayPollTimer = Timer.periodic(
+          relayPollInterval,
+          (_) => unawaited(_pollRelayCache(token)),
+        );
+      }
       unawaited(_resumeOutgoingTransfers());
     } on Object {
+      _started = false;
+      _presenceTimer?.cancel();
+      _presenceTimer = null;
+      _relayReconnectTimer?.cancel();
+      _relayReconnectTimer = null;
+      _relayPollTimer?.cancel();
+      _relayPollTimer = null;
+      _relayToken = null;
       await _lanServer?.close();
       _lanServer = null;
       _router = null;
       rethrow;
+    }
+  }
+
+  void _startRelaySubscription(String token) {
+    if (!_started || _relayToken != token) return;
+    _relayReconnectTimer?.cancel();
+    _relayReconnectTimer = null;
+    try {
+      final subscription =
+          subscriptionFor?.call(relay.server, relay.controlTopic, token) ??
+          NtfyPacketSubscription(
+            server: relay.server,
+            channel: relay.controlTopic,
+            credentials: NtfyCredentials(token),
+          );
+      _subscription = subscription.listen().listen(
+        (packet) => unawaited(_receive(packet)),
+        onError: (_) => _scheduleRelayReconnect(token),
+        onDone: () => _scheduleRelayReconnect(token),
+        cancelOnError: true,
+      );
+    } on Object {
+      _scheduleRelayReconnect(token);
+    }
+  }
+
+  void _scheduleRelayReconnect(String token) {
+    if (!_started || _relayToken != token) return;
+    _relayReconnectTimer?.cancel();
+    _relayReconnectTimer = Timer(
+      relayReconnectDelay,
+      () => _startRelaySubscription(token),
+    );
+  }
+
+  Future<void> _pollRelayCache(String token) async {
+    if (!_started || _relayToken != token || _relayPollInProgress) return;
+    _relayPollInProgress = true;
+    final pollStartedAt = DateTime.now().toUtc();
+    try {
+      final poller =
+          pollerFor?.call(relay.server, relay.controlTopic, token) ??
+          NtfyPacketPoller(
+            server: relay.server,
+            channel: relay.controlTopic,
+            credentials: NtfyCredentials(token),
+          );
+      final cached = await poller.poll(
+        since: _relayPollSince ?? pollStartedAt.subtract(seenPacketRetention),
+      );
+      for (final packet in cached) {
+        if (!_started || _relayToken != token) return;
+        await _receive(packet);
+      }
+      // Overlap the successful cursor slightly so events on the exact second
+      // boundary cannot be missed. Packet IDs make the overlap idempotent.
+      _relayPollSince = pollStartedAt.subtract(const Duration(minutes: 1));
+    } on Object {
+      // Relay polling is a background recovery path. The timer retries while
+      // local and LAN features remain available.
+    } finally {
+      _relayPollInProgress = false;
     }
   }
 
@@ -1086,14 +1145,20 @@ class ActentTransportService implements MessageConnection {
   }
 
   Future<void> stop() async {
+    _started = false;
     _presenceTimer?.cancel();
     _presenceTimer = null;
+    _relayReconnectTimer?.cancel();
+    _relayReconnectTimer = null;
+    _relayPollTimer?.cancel();
+    _relayPollTimer = null;
+    _relayToken = null;
+    _relayPollSince = null;
     await _subscription?.cancel();
     _subscription = null;
     await _lanServer?.close();
     _lanServer = null;
     _router = null;
-    _started = false;
   }
 }
 

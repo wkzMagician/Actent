@@ -131,6 +131,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
   LanPairingServer? _lanPairingServer;
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
   bool _pairingUiActive = false;
+  bool _dependenciesReady = false;
+  Locale? _loadedLocale;
   WorkQueueCoordinator? _queue;
   AttachmentRetention _retention = AttachmentRetention.sevenDays;
   late Duration _packetDedupRetention;
@@ -185,10 +187,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
       _queue = widget.queue ?? WorkQueueCoordinator(repository: repository);
       _queue!.register('local-null', const NullWorkRunner());
       _queue!.addReceiptListener(_onReceipt);
-      _loadRepositoryData(repository);
-      _repositoryUpdateSubscription = widget.router?.repositoryUpdates.listen(
-        (_) => unawaited(_loadRepositoryData(repository)),
-      );
+      _repositoryUpdateSubscription = widget.router?.repositoryUpdates.listen((
+        _,
+      ) {
+        if (_dependenciesReady) {
+          unawaited(_loadRepositoryData(repository));
+        }
+      });
     }
     _externalFileSubscription = widget.externalFilePaths?.listen(
       _importExternalFiles,
@@ -203,6 +208,17 @@ class _ActentHomePageState extends State<ActentHomePage> {
       if (!mounted) return;
       setState(() => _peerConnectionStatusByDevice[status.deviceId] = status);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _dependenciesReady = true;
+    final locale = Localizations.localeOf(context);
+    if (_loadedLocale == locale) return;
+    _loadedLocale = locale;
+    final repository = widget.repository;
+    if (repository != null) unawaited(_loadRepositoryData(repository));
   }
 
   Future<void> _loadRepositoryData(ActentRepository repository) async {
@@ -1012,14 +1028,23 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final l10n = AppLocalizations.of(context)!;
     final candidates = _works.where(_isSelectableWork).toList()
       ..sort((left, right) => left.name.compareTo(right.name));
+    final worksById = {for (final work in _works) work.id: work};
     final result = await showDialog<(String, List<WorkflowStep>)>(
       context: context,
       builder: (dialogContext) {
         final nameController = TextEditingController(text: existing?.name);
-        final steps = [...?existing?.steps];
+        // Catalog updates can remove a Work that an older Workflow still
+        // references. Drop those invalid steps instead of throwing while the
+        // dialog builds and leaving iOS on an empty modal route.
+        final steps = [
+          ...?existing?.steps.where(
+            (step) => worksById.containsKey(step.workId),
+          ),
+        ];
         String? selectedWorkId;
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
+            scrollable: true,
             title: Text(existing == null ? l10n.addWorkflow : l10n.edit),
             content: SizedBox(
               width: 480,
@@ -1042,9 +1067,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
                       leading: Text('${index + 1}'),
                       title: Text(
                         _workSelectionLabel(
-                          _works.firstWhere(
-                            (work) => work.id == steps[index].workId,
-                          ),
+                          worksById[steps[index].workId]!,
                           l10n,
                         ),
                       ),
