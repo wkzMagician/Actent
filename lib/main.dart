@@ -34,35 +34,40 @@ import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
 Future<void> main([List<String> arguments = const []]) async {
-  WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await openActentLogService();
-    appLogger.info('Actent logging initialized.');
-  } on Object {
-    // Logging must not prevent the application from starting.
-  }
-  FlutterError.onError = (details) {
-    FlutterError.presentError(details);
-    try {
-      appLogger.error(
-        'Unhandled Flutter error.',
-        details.exception,
-        details.stack,
-      );
-    } on Object {
-      // The error was already presented and logging is best effort.
-    }
-  };
-  runZonedGuarded(() => runApp(_StartupGate(initialFilePaths: arguments)), (
-    error,
-    stackTrace,
-  ) {
-    try {
-      appLogger.error('Uncaught asynchronous error.', error, stackTrace);
-    } on Object {
-      // Logging must not become another uncaught error.
-    }
-  });
+  await runZonedGuarded(
+    () async {
+      // Flutter requires binding initialization and runApp to happen in the
+      // same zone. This matters on desktop debug builds, where a zone mismatch
+      // is reported as a framework error and the app never reaches its shell.
+      WidgetsFlutterBinding.ensureInitialized();
+      try {
+        await openActentLogService();
+        appLogger.info('Actent logging initialized.');
+      } on Object {
+        // Logging must not prevent the application from starting.
+      }
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        try {
+          appLogger.error(
+            'Unhandled Flutter error.',
+            details.exception,
+            details.stack,
+          );
+        } on Object {
+          // The error was already presented and logging is best effort.
+        }
+      };
+      runApp(_StartupGate(initialFilePaths: arguments));
+    },
+    (error, stackTrace) {
+      try {
+        appLogger.error('Uncaught asynchronous error.', error, stackTrace);
+      } on Object {
+        // Logging must not become another uncaught error.
+      }
+    },
+  );
 }
 
 const _startupTimeout = Duration(seconds: 30);

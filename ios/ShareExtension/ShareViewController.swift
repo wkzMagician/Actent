@@ -32,6 +32,29 @@ final class ShareViewController: SLComposeServiceViewController {
         }
         waitGroup.leave()
       }
+      // File providers used by Notes can advertise a text or URL
+      // representation in addition to the actual file. Prefer a file URL so
+      // an attached file is not accidentally imported as its local URL.
+      if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+        provider.loadFileRepresentation(
+          forTypeIdentifier: UTType.fileURL.identifier
+        ) { url, error in
+          defer { waitGroup.leave() }
+          guard let url, error == nil, let directory else { return }
+          let destination = directory.appendingPathComponent(
+            "share-\(UUID().uuidString)-\(index)-\(url.lastPathComponent)"
+          )
+          do {
+            try FileManager.default.copyItem(at: url, to: destination)
+            lock.lock()
+            paths.append(destination.path)
+            lock.unlock()
+          } catch {
+            // The host app will simply receive fewer files.
+          }
+        }
+        continue
+      }
       if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
         provider.loadItem(
           forTypeIdentifier: UTType.plainText.identifier,
@@ -79,7 +102,10 @@ final class ShareViewController: SLComposeServiceViewController {
         }
         continue
       }
-      let type = provider.registeredTypeIdentifiers.first ?? UTType.data.identifier
+      let type = provider.registeredTypeIdentifiers.first {
+        UTType($0)?.conforms(to: .data) == true ||
+            UTType($0)?.conforms(to: .item) == true
+      } ?? UTType.data.identifier
       provider.loadFileRepresentation(forTypeIdentifier: type) { url, error in
         defer { waitGroup.leave() }
         guard let url, error == nil, let directory else { return }

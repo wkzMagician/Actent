@@ -20,5 +20,24 @@ subprojects {
 }
 
 tasks.register<Delete>("clean") {
-    delete(rootProject.layout.buildDirectory)
+  delete(rootProject.layout.buildDirectory)
+}
+
+// Keep Java and Kotlin bytecode targets aligned for all Android plugins.
+// flutter_js still declares Java 11/Kotlin 1.8, which fails Gradle's target
+// validation when the application is built with the current Android toolchain.
+gradle.projectsEvaluated {
+  subprojects.forEach { project ->
+    project.tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
+      sourceCompatibility = JavaVersion.VERSION_17.toString()
+      targetCompatibility = JavaVersion.VERSION_17.toString()
+    }
+    project.tasks
+      .withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>()
+      .configureEach {
+        compilerOptions {
+          jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
+      }
+  }
 }

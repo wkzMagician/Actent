@@ -4,10 +4,11 @@ import '../actent_core/actent_models.dart';
 import '../work/android/android_work_runner.dart';
 
 const _channelName = 'actent/android_share';
+const _eventChannelName = 'actent/android_share_events';
 
 class AndroidShareBridge {
   AndroidShareBridge({EventChannel? events, MethodChannel? methods})
-    : _events = events ?? const EventChannel(_channelName),
+    : _events = events ?? const EventChannel(_eventChannelName),
       _methods = methods ?? const MethodChannel(_channelName);
 
   final EventChannel _events;

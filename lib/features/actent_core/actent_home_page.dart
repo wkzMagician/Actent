@@ -118,6 +118,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   final Map<String, _ActivityStatus> _messageStatuses = {};
   final Map<String, WorkRequest> _latestRequestsByMessage = {};
   final Map<String, WorkReceipt> _receiptsByRequest = {};
+  final List<ActentMessage> _pendingSharedMessages = [];
   String? _selectedActivityId;
   final Map<String, PeerConnectionStatus> _peerConnectionStatusByDevice = {};
   final Set<String> _connectingDeviceIds = {};
@@ -132,6 +133,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   MdnsPairingAdvertiser? _lanPairingAdvertiser;
   bool _pairingUiActive = false;
   bool _dependenciesReady = false;
+  bool _repositoryDataReady = false;
   Locale? _loadedLocale;
   WorkQueueCoordinator? _queue;
   AttachmentRetention _retention = AttachmentRetention.sevenDays;
@@ -401,6 +403,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (widget.initialFilePaths.isNotEmpty && mounted) {
       await _importExternalFiles(widget.initialFilePaths);
     }
+    _repositoryDataReady = true;
+    final pendingMessages = List<ActentMessage>.from(_pendingSharedMessages);
+    _pendingSharedMessages.clear();
+    for (final message in pendingMessages) {
+      await _handleSharedMessage(message);
+    }
   }
 
   Future<void> _importExternalFiles(List<String> paths) async {
@@ -440,12 +448,23 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _onSharedMessage(ActentMessage message) async {
+    if (!_dependenciesReady ||
+        (widget.repository != null && !_repositoryDataReady)) {
+      _pendingSharedMessages.add(message);
+      return;
+    }
+    await _handleSharedMessage(message);
+  }
+
+  Future<void> _handleSharedMessage(ActentMessage message) async {
     final repository = widget.repository;
     if (repository != null) {
       await repository.saveMessage(message);
     }
     if (!mounted) return;
     setState(() => _messages.insert(0, message));
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
     _showWorkPicker(message);
   }
 

@@ -24,6 +24,7 @@ import java.util.UUID
 class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "actent/android_share"
+        private const val EVENT_CHANNEL = "actent/android_share_events"
         private const val DEVICE_CHANNEL = "actent/device"
         private const val FILE_PROVIDER_SUFFIX = ".fileprovider"
     }
@@ -33,7 +34,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        EventChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        EventChannel(flutterEngine.dartExecutor.binaryMessenger, EVENT_CHANNEL)
             .setStreamHandler(object : EventChannel.StreamHandler {
                 override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                     eventSink = events
