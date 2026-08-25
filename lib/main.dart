@@ -14,10 +14,12 @@ import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_pr
 import 'app/app.dart';
 import 'app/actent_logging.dart';
 import 'app/attachment_directory.dart';
+import 'app/actent_ios_clipboard_external_input_reader.dart';
 import 'app/clipboard_external_input_service.dart';
 import 'app/combined_external_input_service.dart';
 import 'app/object_store_factory.dart';
 import 'app/ios_open_url_external_input_service.dart';
+import 'app/optional_ios_inbox_external_input_service.dart';
 import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
@@ -121,7 +123,9 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   argumentInputs.addFilePaths(externalArguments);
   final platformExternalInputService = switch (defaultTargetPlatform) {
     TargetPlatform.iOS => CombinedExternalInputService([
-      IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
+      OptionalIosInboxExternalInputService(
+        IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
+      ),
       IosOpenUrlExternalInputService(),
     ]),
     TargetPlatform.android => AndroidExternalInputService(),
@@ -144,7 +148,7 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
     );
     final clipboardExternalInputService = switch (defaultTargetPlatform) {
       TargetPlatform.iOS => ClipboardExternalInputService(
-        reader: IosClipboardExternalInputReader(),
+        reader: ActentIosClipboardExternalInputReader(),
         initialChangeToken: initialClipboardChangeToken is String
             ? initialClipboardChangeToken
             : null,

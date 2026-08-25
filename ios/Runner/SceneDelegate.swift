@@ -12,7 +12,7 @@ class SceneDelegate: FlutterSceneDelegate {
   ) {
     super.scene(scene, willConnectTo: session, options: connectionOptions)
     for context in connectionOptions.urlContexts {
-      IosOpenUrlExternalInputBridge.shared.enqueue(context.url)
+      IosOpenUrlExternalInputBridge.shared.enqueueOrWake(context.url)
     }
     for activity in connectionOptions.userActivities {
       if let url = activity.webpageURL {
@@ -26,7 +26,7 @@ class SceneDelegate: FlutterSceneDelegate {
     openURLContexts URLContexts: Set<UIOpenURLContext>
   ) {
     for context in URLContexts {
-      IosOpenUrlExternalInputBridge.shared.enqueue(context.url)
+      IosOpenUrlExternalInputBridge.shared.enqueueOrWake(context.url)
     }
   }
 

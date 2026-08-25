@@ -25,9 +25,19 @@
 			<string>Actent input</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>public.item</string>
+				<string>public.content</string>
 				<string>public.data</string>
+				<string>public.text</string>
+				<string>public.image</string>
+				<string>public.audio</string>
+				<string>public.movie</string>
+				<string>com.adobe.pdf</string>
+				<string>public.archive</string>
 			</array>
 		</dict>
 	</array>
@@ -51,7 +61,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<false/>
+	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Actent uses the local network to pair nearby devices.</string>
 	<key>NSBonjourServices</key>
