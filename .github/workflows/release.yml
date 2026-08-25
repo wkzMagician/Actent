@@ -20,6 +20,7 @@ jobs:
       - run: flutter pub get
       - run: flutter build apk --release
       - run: flutter build appbundle --release
+
       - name: Package Android
         shell: bash
         run: |
@@ -40,11 +41,11 @@ jobs:
           flutter-version: '3.47.0'
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
+
       - name: Package iOS IPA
         shell: bash
         run: |
-          rm -rf Payload dist
-          mkdir -p Payload dist
+          mkdir -p dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qr dist/actent-ios.ipa Payload
       - uses: actions/upload-artifact@v4
@@ -62,20 +63,95 @@ jobs:
       - run: flutter pub get
       - run: choco install innosetup --no-progress -y
       - run: flutter build windows --release
+
       - name: Package Windows installer
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $match = Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)'
-          $version = if ($match) { $match.Matches.Groups[1].Value } else { '0.0.1' }
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$version" "installer\windows.iss"
+          New-Item -ItemType Directory -Force -Path dist
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:\s*([0-9]+\.[0-9]+\.[0-9]+)').Matches.Groups[1].Value
+          if (-not $version) { throw "pubspec.yaml version not found" }
+          & (Get-Command ISCC.exe -ErrorAction Stop).Source "/DMyAppVersion=$version" installer\windows.iss
       - uses: actions/upload-artifact@v4
         with:
           name: windows
           path: dist/*.exe
 
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+      - run: flutter pub get
+      - run: flutter build macos --release
+
+      - name: Package macOS DMG
+        shell: bash
+        run: |
+          mkdir -p dist
+          app_path=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -type d | head -n 1)
+          hdiutil create -volname actent -srcfolder "$app_path" -ov -format UDZO dist/actent-macos.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev zip
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+      - run: flutter pub get
+      - run: flutter build linux --release
+
+      - name: Package Linux bundles
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -czf dist/actent-linux-x64.tar.gz -C build/linux/x64/release bundle
+          version=$(sed -n 's/^version:[[:space:]]*\([0-9][0-9.]*\).*/\1/p' pubspec.yaml | head -n 1)
+          test -n "$version"
+          package_dir="$(mktemp -d)"
+          mkdir -p "$package_dir/DEBIAN" "$package_dir/opt/actent" "$package_dir/usr/share/applications"
+          cp -R build/linux/x64/release/bundle/. "$package_dir/opt/actent/"
+          printf 'Package: %s\nVersion: %s\nSection: utils\nPriority: optional\nArchitecture: amd64\nMaintainer: Dartloom project\nDescription: %s\n' 'actent' "$version" 'actent' > "$package_dir/DEBIAN/control"
+          printf '[Desktop Entry]\nName=%s\nExec=/opt/%s/%s %%F\nType=Application\nTerminal=false\nMimeType=application/octet-stream;\nCategories=Utility;\n' 'actent' 'actent' 'actent' > "$package_dir/usr/share/applications/actent.desktop"
+          dpkg-deb --build "$package_dir" "dist/actent-linux-x64.deb"
+          rm -rf "$package_dir"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+      - run: flutter pub get
+      - run: flutter build web --release
+
+      - name: Package Web
+        shell: bash
+        run: |
+          mkdir -p dist
+          (cd build/web && zip -qr ../../dist/actent-web.zip .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/*
+
   release:
-    needs: [android, ios, windows]
+    needs: [android, ios, windows, macos, linux, web]
     if: ${{ startsWith(github.ref, 'refs/tags/v') && !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
@@ -87,7 +163,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release_files
-          find downloaded_artifacts -type f -exec cp {} release_files/ \;
+          find downloaded_artifacts -type f ! -name 'dartloom-build.json' -exec cp {} release_files/ \;
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
