@@ -55,16 +55,6 @@ jobs:
             ios) flutter build ios --${{ inputs.mode }} --no-codesign ;;
             *) flutter build ${{ matrix.platform }} --${{ inputs.mode }} ;;
           esac
-      - name: Run project post-build hooks
-        shell: bash
-        run: |
-          set -euo pipefail
-          case "${{ matrix.platform }}" in
-            ios)
-              DARTLOOM_BUILD_MODE='${{ inputs.mode }}' DARTLOOM_NATIVE_TARGETS='ActentShareExtension' bash 'tool/build_ios_native_targets.sh' '${{ inputs.mode }}'
-              ;;
-            *) ;;
-          esac
 
       - name: Package artifact
         shell: bash
