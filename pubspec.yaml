@@ -2,7 +2,7 @@ name: actent
 description: "Actent: cross-device programmable content router."
 publish_to: 'none'
 
-version: 0.0.4
+version: 0.0.5
 
 environment:
   sdk: ^3.13.0
