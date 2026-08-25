@@ -4,6 +4,12 @@ import 'package:dartloom_singleton/dartloom_singleton.dart';
 import 'package:dartloom_singleton_socket/dartloom_singleton_socket.dart';
 import 'package:flutter/foundation.dart';
 
+// Windows may reserve dynamically selected port ranges for Hyper-V, WSL, or
+// other networking features. Keep the Actent IPC endpoint outside the
+// identity-derived range so a reserved port is not misreported as a duplicate
+// Actent instance by the socket adapter.
+const _actentSingleInstancePort = 47031;
+
 Future<ResidentService?> createResidentService() async {
   if (defaultTargetPlatform != TargetPlatform.windows &&
       defaultTargetPlatform != TargetPlatform.macOS &&
@@ -38,5 +44,8 @@ SingleInstanceService? createSingleInstanceService() {
       defaultTargetPlatform != TargetPlatform.linux) {
     return null;
   }
-  return SocketSingleInstanceService(identity: 'com.example.actent');
+  return SocketSingleInstanceService(
+    identity: 'com.example.actent',
+    port: _actentSingleInstancePort,
+  );
 }
