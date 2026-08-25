@@ -13,7 +13,7 @@ import '../features/pairing/pairing_relay.dart';
 import '../features/actent_core/attachment_retention.dart';
 import '../features/actent_platform/android_share_bridge.dart';
 import '../features/actent_core/actent_models.dart';
-import '../features/share/actent_share_coordinator.dart';
+import '../features/incoming/incoming_content_service.dart';
 import '../features/work/desktop/desktop_script_runner.dart';
 import '../features/work/work_runner.dart';
 import 'pairing_qr_presenter.dart';
@@ -47,7 +47,7 @@ class DartloomApp extends StatefulWidget {
     this.queue,
     this.pickWorkInputFile,
     this.externalInputService,
-    this.shareCoordinator,
+    this.incomingContentService,
     this.peerConnectionStatuses,
     this.probePeerConnections,
     this.connectPeerConnection,
@@ -83,7 +83,7 @@ class DartloomApp extends StatefulWidget {
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
   final ExternalInputService? externalInputService;
-  final ActentShareCoordinator? shareCoordinator;
+  final IncomingContentService? incomingContentService;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
   final Future<void> Function(String deviceId)? connectPeerConnection;
@@ -141,7 +141,7 @@ class _DartloomAppState extends State<DartloomApp> {
       queue: widget.queue,
       pickWorkInputFile: widget.pickWorkInputFile,
       externalInputService: widget.externalInputService,
-      shareCoordinator: widget.shareCoordinator,
+      incomingContentService: widget.incomingContentService,
       peerConnectionStatuses: widget.peerConnectionStatuses,
       probePeerConnections: widget.probePeerConnections,
       connectPeerConnection: widget.connectPeerConnection,

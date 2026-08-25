@@ -1,11 +1,11 @@
 import 'package:actent/features/actent_core/actent_models.dart';
-import 'package:actent/features/share/actent_share_coordinator.dart';
+import 'package:actent/features/incoming/incoming_content_service.dart';
 import 'package:dartloom_external_input/dartloom_external_input.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('maps text and URL inputs without platform details', () async {
-    final coordinator = ActentShareCoordinator(
+    final coordinator = IncomingContentService(
       deviceId: 'phone',
       importFiles: (_) async => null,
     );

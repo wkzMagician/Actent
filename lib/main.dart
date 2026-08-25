@@ -14,7 +14,9 @@ import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_pr
 import 'app/app.dart';
 import 'app/actent_logging.dart';
 import 'app/attachment_directory.dart';
+import 'app/combined_external_input_service.dart';
 import 'app/object_store_factory.dart';
+import 'app/ios_open_url_external_input_service.dart';
 import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
@@ -32,7 +34,7 @@ import 'features/pairing/pairing_relay.dart';
 import 'features/pairing/pairing.dart';
 import 'features/actent_core/secret_repository.dart';
 import 'features/actent_platform/android_share_bridge.dart';
-import 'features/share/actent_share_coordinator.dart';
+import 'features/incoming/incoming_content_service.dart';
 import 'features/work/work_runner.dart';
 import 'l10n/app_localizations.dart';
 
@@ -117,9 +119,10 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   final argumentInputs = QueuedExternalInputService();
   argumentInputs.addFilePaths(externalArguments);
   final externalInputService = switch (defaultTargetPlatform) {
-    TargetPlatform.iOS => IosExternalInputService(
-      appGroupIdentifier: 'group.com.example.actent',
-    ),
+    TargetPlatform.iOS => CombinedExternalInputService([
+      IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
+      IosOpenUrlExternalInputService(),
+    ]),
     TargetPlatform.android => AndroidExternalInputService(),
     _ => argumentInputs,
   };
@@ -306,9 +309,9 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
         _ => null,
       },
       externalInputService: externalInputService,
-      shareCoordinator: attachmentRoot == null
+      incomingContentService: attachmentRoot == null
           ? null
-          : ActentShareCoordinator(
+          : IncomingContentService(
               deviceId: identity.deviceId,
               importFiles: (paths) => importLocalWorkInputFiles(
                 paths: paths,

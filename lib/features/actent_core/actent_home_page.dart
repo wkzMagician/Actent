@@ -11,7 +11,7 @@ import '../actent_platform/android_share_bridge.dart';
 import '../pairing/pairing.dart';
 import '../pairing/lan_pairing.dart';
 import '../pairing/pairing_relay.dart';
-import '../share/actent_share_coordinator.dart';
+import '../incoming/incoming_content_service.dart';
 import '../work/desktop/desktop_script_runner.dart';
 import '../work/android/android_work_runner.dart';
 import '../work/work_bindings.dart';
@@ -57,7 +57,7 @@ class ActentHomePage extends StatefulWidget {
     this.queue,
     this.pickWorkInputFile,
     this.externalInputService,
-    this.shareCoordinator,
+    this.incomingContentService,
     this.peerConnectionStatuses,
     this.probePeerConnections,
     this.connectPeerConnection,
@@ -95,7 +95,7 @@ class ActentHomePage extends StatefulWidget {
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
   final ExternalInputService? externalInputService;
-  final ActentShareCoordinator? shareCoordinator;
+  final IncomingContentService? incomingContentService;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
   final Future<void> Function(String deviceId)? connectPeerConnection;
@@ -179,8 +179,8 @@ class _ActentHomePageState extends State<ActentHomePage> {
     _retention = widget.initialAttachmentRetention;
     _packetDedupRetention = widget.initialPacketDedupRetention;
     final externalInputService = widget.externalInputService;
-    final shareCoordinator = widget.shareCoordinator;
-    if (externalInputService != null && shareCoordinator != null) {
+    final incomingContentService = widget.incomingContentService;
+    if (externalInputService != null && incomingContentService != null) {
       _externalInputSubscription = externalInputService.inputs.listen(
         _onExternalInput,
       );
@@ -424,10 +424,10 @@ class _ActentHomePageState extends State<ActentHomePage> {
   }
 
   Future<void> _onExternalInput(ExternalInputBatch batch) async {
-    final coordinator = widget.shareCoordinator;
-    if (coordinator == null) return;
+    final incomingContentService = widget.incomingContentService;
+    if (incomingContentService == null) return;
     try {
-      for (final message in await coordinator.handle(batch)) {
+      for (final message in await incomingContentService.handle(batch)) {
         await _onSharedMessage(message);
       }
     } on Object catch (error) {

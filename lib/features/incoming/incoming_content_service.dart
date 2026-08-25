@@ -6,12 +6,13 @@ typedef ExternalFileMessageImporter = Future<ActentMessage?> Function(
   List<String> paths,
 );
 
-/// Translates platform-neutral input into Actent's message model.
+/// Translates acquired external input into Actent messages.
 ///
-/// Platform adapters own acquisition and file lifetime. This coordinator only
-/// chooses the Actent payload shape that the Work and Workflow picker needs.
-final class ActentShareCoordinator {
-  ActentShareCoordinator({required this.deviceId, required this._importFiles});
+/// Platform adapters only acquire content and preserve its lifetime. This
+/// service is the single business entry point for Share Extension, open-URL,
+/// Android Intent, and desktop file-open batches.
+final class IncomingContentService {
+  IncomingContentService({required this.deviceId, required this._importFiles});
 
   final String deviceId;
   final ExternalFileMessageImporter _importFiles;
