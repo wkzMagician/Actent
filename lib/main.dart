@@ -19,7 +19,6 @@ import 'app/clipboard_external_input_service.dart';
 import 'app/combined_external_input_service.dart';
 import 'app/object_store_factory.dart';
 import 'app/ios_open_url_external_input_service.dart';
-import 'app/optional_ios_inbox_external_input_service.dart';
 import 'app/platform_services.dart';
 import 'app/actent_dependencies.dart';
 import 'app/resident_configuration.dart';
@@ -123,9 +122,7 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   argumentInputs.addFilePaths(externalArguments);
   final platformExternalInputService = switch (defaultTargetPlatform) {
     TargetPlatform.iOS => CombinedExternalInputService([
-      OptionalIosInboxExternalInputService(
-        IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
-      ),
+      IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
       IosOpenUrlExternalInputService(),
     ]),
     TargetPlatform.android => AndroidExternalInputService(),

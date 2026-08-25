@@ -132,17 +132,8 @@ final class IosOpenUrlExternalInputBridge: NSObject, FlutterStreamHandler {
       enqueue(url)
       return
     }
-    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-          let encoded = components.queryItems?.first(where: { $0.name == "payload" })?.value,
-          let data = Self.decodeBase64Url(encoded),
-          let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let items = payload["items"] as? [[String: Any]],
-          !items.isEmpty else {
-      // A URL without a payload only wakes the app so the App Group inbox can
-      // be consumed by the regular foreground observer.
-      return
-    }
-    enqueue(batch: ["items": items, "source": "share"])
+    // The Share Extension has already persisted the batch in the App Group.
+    // This URL only asks the containing app to foreground and consume it.
   }
 
   private func enqueue(item: [String: Any], source: String) {
@@ -157,17 +148,6 @@ final class IosOpenUrlExternalInputBridge: NSObject, FlutterStreamHandler {
     }
     lock.unlock()
     sink?(batch)
-  }
-
-  private static func decodeBase64Url(_ value: String) -> Data? {
-    var base64 = value
-      .replacingOccurrences(of: "-", with: "+")
-      .replacingOccurrences(of: "_", with: "/")
-    let remainder = base64.count % 4
-    if remainder != 0 {
-      base64.append(String(repeating: "=", count: 4 - remainder))
-    }
-    return Data(base64Encoded: base64)
   }
 
   private func retainIncomingFile(_ source: URL) throws -> URL {
