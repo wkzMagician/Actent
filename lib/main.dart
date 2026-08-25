@@ -14,6 +14,7 @@ import 'package:dartloom_settings_shared_preferences/dartloom_settings_shared_pr
 import 'app/app.dart';
 import 'app/actent_logging.dart';
 import 'app/attachment_directory.dart';
+import 'app/clipboard_external_input_service.dart';
 import 'app/combined_external_input_service.dart';
 import 'app/object_store_factory.dart';
 import 'app/ios_open_url_external_input_service.dart';
@@ -118,7 +119,7 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   final singleInstance = createSingleInstanceService();
   final argumentInputs = QueuedExternalInputService();
   argumentInputs.addFilePaths(externalArguments);
-  final externalInputService = switch (defaultTargetPlatform) {
+  final platformExternalInputService = switch (defaultTargetPlatform) {
     TargetPlatform.iOS => CombinedExternalInputService([
       IosExternalInputService(appGroupIdentifier: 'group.com.example.actent'),
       IosOpenUrlExternalInputService(),
@@ -137,6 +138,35 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
       );
     }
     final appSettings = SharedPreferencesSettingsStore();
+    final initialClipboardChangeToken = await _startupStep(
+      appSettings.read('externalInput.clipboard.changeToken'),
+      'reading clipboard input state',
+    );
+    final clipboardExternalInputService = switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => ClipboardExternalInputService(
+        reader: IosClipboardExternalInputReader(),
+        initialChangeToken: initialClipboardChangeToken is String
+            ? initialClipboardChangeToken
+            : null,
+        saveChangeToken: (token) =>
+            appSettings.write('externalInput.clipboard.changeToken', token),
+      ),
+      TargetPlatform.android => ClipboardExternalInputService(
+        reader: AndroidClipboardExternalInputReader(),
+        initialChangeToken: initialClipboardChangeToken is String
+            ? initialClipboardChangeToken
+            : null,
+        saveChangeToken: (token) =>
+            appSettings.write('externalInput.clipboard.changeToken', token),
+      ),
+      _ => null,
+    };
+    final externalInputService = clipboardExternalInputService == null
+        ? platformExternalInputService
+        : CombinedExternalInputService([
+            platformExternalInputService,
+            clipboardExternalInputService,
+          ]);
     final secretSettings = const SecureSettingsStore();
     final openedObjectStore = await _startupStep(
       openActentObjectStore(),
@@ -309,6 +339,7 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
         _ => null,
       },
       externalInputService: externalInputService,
+      clipboardExternalInputService: clipboardExternalInputService,
       incomingContentService: attachmentRoot == null
           ? null
           : IncomingContentService(

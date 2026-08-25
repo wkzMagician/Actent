@@ -19,6 +19,18 @@ import UIKit
     return true
   }
 
+  override func application(
+    _ application: UIApplication,
+    continue userActivity: NSUserActivity,
+    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+  ) -> Bool {
+    guard let url = userActivity.webpageURL else {
+      return false
+    }
+    IosOpenUrlExternalInputBridge.shared.enqueue(url)
+    return true
+  }
+
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     guard let registrar = engineBridge.pluginRegistry.registrar(
@@ -92,19 +104,27 @@ final class IosOpenUrlExternalInputBridge: NSObject, FlutterStreamHandler {
   }
 
   func enqueue(_ url: URL) {
-    let item: [String: Any]
-    let source: String
     if url.isFileURL {
-      item = [
-        "type": "file",
-        "path": url.path,
-        "name": url.lastPathComponent,
-      ]
-      source = "openWith"
-    } else {
-      item = ["type": "url", "url": url.absoluteString]
-      source = "deepLink"
+      do {
+        let retained = try retainIncomingFile(url)
+        enqueue(
+          item: [
+            "type": "file",
+            "path": retained.path,
+            "name": retained.lastPathComponent,
+          ],
+          source: "openWith"
+        )
+      } catch {
+        // The original URL may be security-scoped or transient. Do not queue a
+        // path which will fail after Flutter has finished starting.
+      }
+      return
     }
+    enqueue(item: ["type": "url", "url": url.absoluteString], source: "deepLink")
+  }
+
+  private func enqueue(item: [String: Any], source: String) {
     let batch: [String: Any] = ["items": [item], "source": source]
     lock.lock()
     let sink = eventSink
@@ -113,6 +133,32 @@ final class IosOpenUrlExternalInputBridge: NSObject, FlutterStreamHandler {
     }
     lock.unlock()
     sink?(batch)
+  }
+
+  private func retainIncomingFile(_ source: URL) throws -> URL {
+    let manager = FileManager.default
+    let directory = try manager.url(
+      for: .cachesDirectory,
+      in: .userDomainMask,
+      appropriateFor: nil,
+      create: true
+    )
+    .appendingPathComponent("ActentIncoming", isDirectory: true)
+    try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+    let name = source.lastPathComponent
+      .replacingOccurrences(of: "/", with: "_")
+      .replacingOccurrences(of: "\0", with: "")
+    let destination = directory.appendingPathComponent(
+      "\(UUID().uuidString)-\(name.isEmpty ? "attachment" : name)"
+    )
+    let accessing = source.startAccessingSecurityScopedResource()
+    defer {
+      if accessing {
+        source.stopAccessingSecurityScopedResource()
+      }
+    }
+    try manager.copyItem(at: source, to: destination)
+    return destination
   }
 
   func onListen(

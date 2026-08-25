@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:dartloom_pairing/qr_adapters.dart';
@@ -17,6 +19,7 @@ import '../features/incoming/incoming_content_service.dart';
 import '../features/work/desktop/desktop_script_runner.dart';
 import '../features/work/work_runner.dart';
 import 'pairing_qr_presenter.dart';
+import 'clipboard_external_input_service.dart';
 
 class DartloomApp extends StatefulWidget {
   const DartloomApp({
@@ -47,6 +50,7 @@ class DartloomApp extends StatefulWidget {
     this.queue,
     this.pickWorkInputFile,
     this.externalInputService,
+    this.clipboardExternalInputService,
     this.incomingContentService,
     this.peerConnectionStatuses,
     this.probePeerConnections,
@@ -83,6 +87,7 @@ class DartloomApp extends StatefulWidget {
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
   final ExternalInputService? externalInputService;
+  final ClipboardExternalInputService? clipboardExternalInputService;
   final IncomingContentService? incomingContentService;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
   final Future<void> Function()? probePeerConnections;
@@ -94,13 +99,34 @@ class DartloomApp extends StatefulWidget {
   State<DartloomApp> createState() => _DartloomAppState();
 }
 
-class _DartloomAppState extends State<DartloomApp> {
+class _DartloomAppState extends State<DartloomApp> with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.clipboardExternalInputService?.poll());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(widget.clipboardExternalInputService?.dispose());
+    super.dispose();
+  }
+
   Locale? _locale;
 
   @override
   void initState() {
     super.initState();
     _locale = widget.locale;
+    WidgetsBinding.instance.addObserver(this);
+    final clipboard = widget.clipboardExternalInputService;
+    if (clipboard != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(clipboard.poll());
+      });
+    }
   }
 
   Future<void> _changeLocale(Locale locale) async {
