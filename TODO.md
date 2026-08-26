@@ -4,9 +4,9 @@
 
 [] 从手机向电脑发送的任务，两端显示的错误原因不同：
 手机：
-![alt text](175734d83a1ce3e47f6009c88b778ce5.jpg)
+![alt text](assers/175734d83a1ce3e47f6009c88b778ce5.jpg)
 电脑：
-![alt text](image.png)
+![alt text](assets/image.png)
 核心原因是电脑脚本有问题？但是手机收不到正确的错误信息，只会显示 "No runner is registered after restart."
 
 [] 现在从剪贴板/用应用打开/分享，打开Actent，会弹出一个选择框。即使用户选择“丢弃”或者点击空白处让选择框消失，仍然会产生一个activity，显示“正在发送中”，这是非常不合理的。
