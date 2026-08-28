@@ -41,6 +41,21 @@ class AndroidShareBridge {
         AndroidIntentTarget.fromJson(value),
     ];
   }
+
+  /// Opens Android's system photo picker and returns temporary private file
+  /// paths. The caller owns importing and deleting those temporary files.
+  Future<List<String>> pickImages({int maximum = 20}) async {
+    final values = await _methods.invokeMethod<List<Object?>>('pickImages', {
+      'maximum': maximum,
+    });
+    return [for (final value in values ?? const <Object?>[]) '$value'];
+  }
+
+  Future<void> cleanupPickedImages(Iterable<String> paths) async {
+    await _methods.invokeMethod<void>('cleanupPickedImages', {
+      'paths': paths.toList(growable: false),
+    });
+  }
 }
 
 class AndroidIntentTarget {

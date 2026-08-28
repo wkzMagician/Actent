@@ -386,31 +386,49 @@ class ActentRouter {
         request,
         WorkReceiptStatus.failed,
         'work_unavailable',
+        summary: 'The requested Work is not available on the target device.',
       );
     }
     if (request.workRevision != work.revision) {
-      return _sendFailure(request, WorkReceiptStatus.failed, 'work_changed');
+      return _sendFailure(
+        request,
+        WorkReceiptStatus.failed,
+        'work_changed',
+        summary: 'The target Work has changed since this request was created.',
+      );
     }
     if (!work.isAuthorized(request.sourceDeviceId)) {
       return _sendFailure(
         request,
         WorkReceiptStatus.failed,
         'authorization_denied',
+        summary: 'The source device is not authorized for this Work.',
       );
     }
     if (request.isExpired) {
-      return _sendFailure(request, WorkReceiptStatus.expired, 'expired');
+      return _sendFailure(
+        request,
+        WorkReceiptStatus.expired,
+        'expired',
+        summary: 'The Work request expired before it reached the runner.',
+      );
     }
     try {
       await queue.enqueue(work, request);
       await repository.saveMessage(request.message);
     } on WorkQueueFullException {
-      return _sendFailure(request, WorkReceiptStatus.failed, 'queue_full');
+      return _sendFailure(
+        request,
+        WorkReceiptStatus.failed,
+        'queue_full',
+        summary: 'The target Work queue is full.',
+      );
     } on WorkUnavailableException catch (error) {
       return _sendFailure(
         request,
         WorkReceiptStatus.failed,
         _errorCode(error.reason),
+        summary: 'The target Work cannot run: ${error.reason}.',
       );
     }
     final stored = WorkReceipt(
@@ -498,8 +516,9 @@ class ActentRouter {
   Future<WorkReceipt> _sendFailure(
     WorkRequest request,
     WorkReceiptStatus status,
-    String errorCode,
-  ) async {
+    String errorCode, {
+    String? summary,
+  }) async {
     final receipt = WorkReceipt(
       requestId: request.requestId,
       workId: request.workId,
@@ -507,6 +526,8 @@ class ActentRouter {
       createdAt: DateTime.now().toUtc(),
       completedAt: DateTime.now().toUtc(),
       errorCode: errorCode,
+      error: WorkError(code: errorCode, message: summary),
+      summary: summary,
     );
     await repository.saveReceipt(receipt);
     await _sendReceipt(request.sourceDeviceId, receipt);
@@ -519,7 +540,7 @@ class ActentRouter {
         payload: <String, Object?>{
           'type': 'workReceipt',
           'schemaVersion': actentSchemaVersion,
-          'receipt': receipt.toJson(),
+          'receipt': receipt.toRemoteJson(),
         },
       );
 
@@ -528,11 +549,9 @@ class ActentRouter {
     String? ownerDeviceId,
   }) async {
     final incoming = WorkCatalog.fromSnapshotJson(value);
-    final snapshot = Map<String, Object?>.from(value as Map);
-    final rawWorkflows = snapshot['workflows'];
-    final incomingWorkflows = rawWorkflows is List
-        ? rawWorkflows.map(Workflow.fromJson).toList()
-        : const <Workflow>[];
+    // Workflows are local automation definitions. Older peers may still send
+    // workflow fields, but they are intentionally ignored at the boundary.
+    final incomingWorkflows = const <Workflow>[];
     if (ownerDeviceId != null &&
         incomingWorkflows.any(
           (workflow) => workflow.ownerDeviceId != ownerDeviceId,
@@ -592,10 +611,9 @@ class ActentRouter {
       throw const WorkCatalogException('delta upserts/removals are invalid');
     }
     final upserts = rawUpserts.map(Work.fromJson).toList();
-    final rawWorkflowUpserts = json['workflowUpserts'];
-    final workflowUpserts = rawWorkflowUpserts is List
-        ? rawWorkflowUpserts.map(Workflow.fromJson).toList()
-        : const <Workflow>[];
+    // Workflows never cross the pairing boundary. Ignore legacy fields from
+    // older peers rather than importing remote automation definitions.
+    final workflowUpserts = const <Workflow>[];
     if (ownerDeviceId != null &&
         upserts.any((work) => work.ownerDeviceId != ownerDeviceId)) {
       throw const WorkCatalogException(
@@ -664,16 +682,15 @@ class ActentRouter {
         'catalog': <String, Object?>{
           'revision': revision,
           'works': works.map((work) => work.toCatalogJson()).toList(),
-          'workflows': (await _ownedWorkflows())
-              .map((workflow) => workflow.toJson())
-              .toList(),
+          // Workflows are intentionally device-local and are not published.
+          'workflows': const <Object?>[],
         },
       },
     );
     _publishedCatalogs[recipientId] = _PublishedCatalog(
       revision: revision,
       works: works,
-      workflows: await _ownedWorkflows(),
+      workflows: const <Workflow>[],
     );
   }
 
@@ -786,7 +803,8 @@ class ActentRouter {
       return;
     }
     final current = await _ownedWorks();
-    final currentWorkflows = await _ownedWorkflows();
+    // Workflows are intentionally device-local and are not published.
+    final currentWorkflows = const <Workflow>[];
     final previousById = {for (final work in previous.works) work.id: work};
     final currentById = {for (final work in current) work.id: work};
     final upserts = current
@@ -849,11 +867,6 @@ class ActentRouter {
   Future<List<Work>> _ownedWorks() async => (await repository.listWorks())
       .where((work) => work.ownerDeviceId == deviceId)
       .toList(growable: false);
-
-  Future<List<Workflow>> _ownedWorkflows() async =>
-      (await repository.listWorkflows())
-          .where((workflow) => workflow.ownerDeviceId == deviceId)
-          .toList(growable: false);
 
   WorkCatalog _catalogFor(String? ownerDeviceId) {
     final localCatalog = catalog;

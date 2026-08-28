@@ -36,6 +36,7 @@ class DartloomApp extends StatefulWidget {
     this.onRelaySettingsChanged,
     this.lanHost,
     this.lanPort,
+    this.lanPortListenable,
     this.lanCertificateSha256,
     this.lanServerConfig,
     this.pairingDiscovery,
@@ -49,6 +50,7 @@ class DartloomApp extends StatefulWidget {
     this.router,
     this.queue,
     this.pickWorkInputFile,
+    this.pickImageWorkInputFile,
     this.externalInputService,
     this.clipboardExternalInputService,
     this.incomingContentService,
@@ -72,6 +74,7 @@ class DartloomApp extends StatefulWidget {
   onRelaySettingsChanged;
   final String? lanHost;
   final int? lanPort;
+  final ValueListenable<int?>? lanPortListenable;
   final String? lanCertificateSha256;
   final ActentLanServerConfig? lanServerConfig;
   final PairingDiscovery? pairingDiscovery;
@@ -86,6 +89,7 @@ class DartloomApp extends StatefulWidget {
   final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
+  final Future<ActentMessage?> Function()? pickImageWorkInputFile;
   final ExternalInputService? externalInputService;
   final ClipboardExternalInputService? clipboardExternalInputService;
   final IncomingContentService? incomingContentService;
@@ -154,6 +158,7 @@ class _DartloomAppState extends State<DartloomApp> with WidgetsBindingObserver {
       onRelaySettingsChanged: widget.onRelaySettingsChanged,
       lanHost: widget.lanHost,
       lanPort: widget.lanPort,
+      lanPortListenable: widget.lanPortListenable,
       lanCertificateSha256: widget.lanCertificateSha256,
       lanServerConfig: widget.lanServerConfig,
       pairingDiscovery: widget.pairingDiscovery,
@@ -166,6 +171,7 @@ class _DartloomAppState extends State<DartloomApp> with WidgetsBindingObserver {
       router: widget.router,
       queue: widget.queue,
       pickWorkInputFile: widget.pickWorkInputFile,
+      pickImageWorkInputFile: widget.pickImageWorkInputFile,
       externalInputService: widget.externalInputService,
       incomingContentService: widget.incomingContentService,
       peerConnectionStatuses: widget.peerConnectionStatuses,

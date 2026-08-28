@@ -1,4 +1,5 @@
 import 'package:actent/features/actent_core/actent_models.dart';
+import 'package:actent/features/work/work_runner.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -24,4 +25,31 @@ void main() {
     expect(remote['diagnostics'], isNull);
     expect(remote['summary'], endsWith('[truncated]'));
   });
+
+  test(
+    'uses a canonical diagnostic when a Work runner is unavailable',
+    () async {
+      final result =
+          await const UnavailableWorkRunner(
+            summary: 'Work binding is invalid: executable does not exist.',
+          ).run(
+            Work.nullWork(id: 'work', ownerDeviceId: 'device', name: 'Work'),
+            ActentMessage(
+              id: 'message',
+              traceId: 'trace',
+              createdAt: DateTime.utc(2026),
+              source: const ActentSource(kind: 'test'),
+              content: ActentContent(
+                type: ActentContentType.text,
+                data: const {'text': 'hello'},
+              ),
+            ),
+            requestId: 'request',
+            cancellation: CancellationToken(),
+          );
+
+      expect(result.errorCode, 'runner_unavailable');
+      expect(result.summary, contains('executable does not exist'));
+    },
+  );
 }

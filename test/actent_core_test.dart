@@ -755,7 +755,7 @@ void main() {
     },
   );
 
-  test('router executes a workflow across two paired devices', () async {
+  test('router rejects a workflow that crosses paired devices', () async {
     final sourceRepository = ActentRepository(MemoryActentJsonStore());
     final targetRepository = ActentRepository(MemoryActentJsonStore());
     final remoteWork = Work(
@@ -855,9 +855,10 @@ void main() {
         ],
       ),
     );
-    expect(execution.status, WorkflowExecutionStatus.succeeded);
-    expect((await targetRepository.listRequests()), hasLength(1));
-    expect((await sourceRepository.listRequests()), hasLength(2));
+    expect(execution.status, WorkflowExecutionStatus.invalid);
+    expect(execution.error?.message, contains('workflow_local_only'));
+    expect(await targetRepository.listRequests(), isEmpty);
+    expect(await sourceRepository.listRequests(), isEmpty);
   });
 }
 

@@ -6,7 +6,7 @@ import 'package:actent/features/actent_core/workflow_engine.dart';
 
 void main() {
   test(
-    'workflow validation locks Work revisions and adjacent pairing',
+    'workflow validation locks Work revisions for a local workflow',
     () async {
       final repository = ActentRepository(MemoryActentJsonStore());
       await repository.saveWork(
@@ -14,7 +14,7 @@ void main() {
           id: 'download',
           revision: 2,
           name: 'Download',
-          ownerDeviceId: 'desktop',
+          ownerDeviceId: 'phone',
           acceptedContentTypes: {ActentContentType.url},
           outputType: ActentContentType.file,
         ),
@@ -48,7 +48,7 @@ void main() {
             id: 'one',
             workId: 'download',
             workRevision: 2,
-            deviceId: 'desktop',
+            deviceId: 'phone',
           ),
           WorkflowStep(
             id: 'two',
@@ -85,6 +85,48 @@ void main() {
       );
     },
   );
+
+  test('workflow validation rejects cross-device workflow steps', () async {
+    final repository = ActentRepository(MemoryActentJsonStore());
+    await repository.saveWork(
+      Work(
+        id: 'remote',
+        revision: 1,
+        name: 'Remote',
+        ownerDeviceId: 'desktop',
+        acceptedContentTypes: const {ActentContentType.text},
+        outputType: ActentContentType.text,
+      ),
+    );
+
+    final result =
+        await WorkflowValidator(
+          repository: repository,
+          localDeviceId: 'phone',
+        ).validate(
+          Workflow(
+            id: 'remote-workflow',
+            revision: 1,
+            name: 'Remote workflow',
+            ownerDeviceId: 'phone',
+            acceptedContentTypes: {ActentContentType.text},
+            steps: [
+              WorkflowStep(
+                id: 'remote-step',
+                workId: 'remote',
+                workRevision: 1,
+                deviceId: 'desktop',
+              ),
+            ],
+          ),
+        );
+
+    expect(result.isValid, isFalse);
+    expect(
+      result.issues.map((issue) => issue.code),
+      contains('workflow_local_only'),
+    );
+  });
 
   test('workflow execution state round trips and remains durable', () async {
     final repository = ActentRepository(MemoryActentJsonStore());

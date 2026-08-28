@@ -30,6 +30,14 @@ class WorkflowValidator {
 
   Future<WorkflowValidationResult> validate(Workflow workflow) async {
     final issues = <WorkflowValidationIssue>[];
+    if (workflow.ownerDeviceId != localDeviceId) {
+      issues.add(
+        const WorkflowValidationIssue(
+          'workflow_local_only',
+          'workflow belongs to another device',
+        ),
+      );
+    }
     if (!workflow.enabled) {
       issues.add(
         const WorkflowValidationIssue('disabled', 'workflow is disabled'),
@@ -83,10 +91,9 @@ class WorkflowValidator {
         );
       }
       if (step.deviceId != localDeviceId) {
-        final device = await repository.getDevice(step.deviceId);
-        if (device == null || !device.authorized) {
-          issues.add(WorkflowValidationIssue('device_unpaired', step.deviceId));
-        }
+        issues.add(
+          WorkflowValidationIssue('workflow_local_only', step.deviceId),
+        );
       }
       if (index > 0 && workflow.steps[index - 1].deviceId != step.deviceId) {
         final previousDevice = workflow.steps[index - 1].deviceId;
@@ -94,7 +101,7 @@ class WorkflowValidator {
           final device = await repository.getDevice(previousDevice);
           if (device == null || !device.authorized) {
             issues.add(
-              WorkflowValidationIssue('device_unpaired', previousDevice),
+              WorkflowValidationIssue('workflow_local_only', previousDevice),
             );
           }
         }
