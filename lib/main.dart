@@ -116,6 +116,57 @@ Future<void> _disposeStartupResources({
   }
 }
 
+Future<void> _finishApplicationStartup({
+  required ActentTransportService transport,
+  required ActentRouter router,
+  required ActentRepository repository,
+  required DeviceIdentity identity,
+  required String deviceDisplayName,
+  required ActentRelaySettings relay,
+  required SingleInstanceService? singleInstance,
+  required QueuedExternalInputService argumentInputs,
+  required ValueNotifier<int?> lanPort,
+  required Future<void> Function(ResidentService? resident) configureResident,
+  required void Function(ResidentService? resident) onResidentReady,
+}) async {
+  await _startupStep(transport.start(router), 'starting transport');
+  lanPort.value = transport.lanPort;
+  await _startupStep(
+    repository.saveDevice(
+      Device(
+        id: identity.deviceId,
+        displayName: deviceDisplayName,
+        platform: defaultTargetPlatform.name,
+        publicKey: identity.publicKey,
+        endpoint: {
+          'relayUrl': relay.server.toString(),
+          'relayTopic': relay.controlTopic,
+          'relayBlobTopic': relay.blobTopic,
+          if (transport.lanHost != null) 'lanHost': transport.lanHost,
+          if (transport.lanPort != null) 'lanPort': transport.lanPort,
+          if (transport.lanCertificateSha256 != null)
+            'certificateSha256': transport.lanCertificateSha256,
+        },
+      ),
+    ),
+    'saving local device information',
+  );
+  unawaited(_publishDeviceUpdate(router, repository, identity.deviceId));
+  unawaited(_publishCatalogSnapshots(router));
+
+  final resident = await _startupStep(
+    createResidentService(),
+    'initializing the resident service',
+  );
+  onResidentReady(resident);
+  await singleInstance?.configure(
+    SingleInstanceConfiguration(
+      onArgs: (args) async => argumentInputs.addFilePaths(args),
+    ),
+  );
+  await configureResident(resident);
+}
+
 Future<DartloomApp> _createApplication(List<String> externalArguments) async {
   final singleInstance = createSingleInstanceService();
   final argumentInputs = QueuedExternalInputService();
@@ -251,35 +302,12 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
       connection: transport,
       queue: queue,
     );
-    await _startupStep(transport.start(router), 'starting transport');
-    await _startupStep(
-      repository.saveDevice(
-        Device(
-          id: identity.deviceId,
-          displayName: deviceDisplayName,
-          platform: defaultTargetPlatform.name,
-          publicKey: identity.publicKey,
-          endpoint: {
-            'relayUrl': relay.server.toString(),
-            'relayTopic': relay.controlTopic,
-            'relayBlobTopic': relay.blobTopic,
-            if (transport.lanHost != null) 'lanHost': transport.lanHost,
-            if (transport.lanPort != null) 'lanPort': transport.lanPort,
-            if (transport.lanCertificateSha256 != null)
-              'certificateSha256': transport.lanCertificateSha256,
-          },
-        ),
-      ),
-      'saving local device information',
-    );
-    unawaited(_publishDeviceUpdate(router, repository, identity.deviceId));
-    unawaited(_publishCatalogSnapshots(router));
-    resident = await _startupStep(
-      createResidentService(),
-      'initializing the resident service',
-    );
     final activeTransport = transport;
     final activeObjectStore = openedObjectStore;
+    final localLanPort = ValueNotifier<int?>(transport.lanPort);
+    final androidShareBridge = defaultTargetPlatform == TargetPlatform.android
+        ? AndroidShareBridge()
+        : null;
     final application = DartloomApp(
       locale: initialLocale,
       onLocaleChanged: (locale) =>
@@ -303,6 +331,7 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
       },
       lanHost: transport.lanHost,
       lanPort: transport.lanPort,
+      lanPortListenable: localLanPort,
       lanCertificateSha256: transport.lanCertificateSha256,
       lanServerConfig: lanServerConfig,
       pairingDiscovery: MdnsPairingDiscovery(
@@ -339,6 +368,20 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
         ),
         _ => null,
       },
+      pickImageWorkInputFile: androidShareBridge == null
+          ? null
+          : () async {
+              final paths = await androidShareBridge.pickImages();
+              try {
+                return await importLocalWorkInputFiles(
+                  paths: paths,
+                  attachmentDirectory: attachmentRoot!.path,
+                  deviceId: identity.deviceId,
+                );
+              } finally {
+                await androidShareBridge.cleanupPickedImages(paths);
+              }
+            },
       externalInputService: externalInputService,
       clipboardExternalInputService: clipboardExternalInputService,
       incomingContentService: attachmentRoot == null
@@ -355,41 +398,45 @@ Future<DartloomApp> _createApplication(List<String> externalArguments) async {
       probePeerConnections: transport.probePeers,
       connectPeerConnection: transport.probePeer,
       desktopSecrets: SettingsDesktopSecretResolver(secretRepository),
-      shareBridge: defaultTargetPlatform == TargetPlatform.android
-          ? AndroidShareBridge()
-          : null,
+      shareBridge: androidShareBridge,
     );
-    await singleInstance?.configure(
-      SingleInstanceConfiguration(
-        onArgs: (args) async => argumentInputs.addFilePaths(args),
-      ),
-    );
-    // Resident/tray setup is optional. Do not hold the first Flutter frame on
-    // a platform plugin; a tray failure must not make the app look blank.
     unawaited(
-      configureResidentMenu(
-        resident: resident,
-        onExitRequested: () async {
-          try {
-            await activeTransport.stop().timeout(
-              const Duration(milliseconds: 600),
-            );
-          } on Object {
-            // Exit must remain responsive even if a network subscription is slow.
-          }
-          await singleInstance?.dispose();
-          await argumentInputs.dispose();
-          await resident?.dispose();
-          await activeObjectStore.close();
-          return true;
-        },
+      _finishApplicationStartup(
+        transport: activeTransport,
+        router: router,
+        repository: repository,
+        identity: identity,
+        deviceDisplayName: deviceDisplayName,
+        relay: relay,
+        singleInstance: singleInstance,
+        argumentInputs: argumentInputs,
+        lanPort: localLanPort,
+        onResidentReady: (value) => resident = value,
+        configureResident: (readyResident) => configureResidentMenu(
+          resident: readyResident,
+          onExitRequested: () async {
+            try {
+              await activeTransport.stop().timeout(
+                const Duration(milliseconds: 600),
+              );
+            } on Object {
+              // Exit must remain responsive even if a network subscription is slow.
+            }
+            await singleInstance?.dispose();
+            await argumentInputs.dispose();
+            await readyResident?.dispose();
+            localLanPort.dispose();
+            await activeObjectStore.close();
+            return true;
+          },
+        ),
       ).catchError((error, stackTrace) {
         appLogger.error(
-          'Failed to configure the resident menu.',
+          'Failed to finish background application startup.',
           error,
           stackTrace,
         );
-        debugPrint('Failed to configure the resident menu: $error');
+        debugPrint('Failed to finish background application startup: $error');
         debugPrintStack(stackTrace: stackTrace);
       }),
     );

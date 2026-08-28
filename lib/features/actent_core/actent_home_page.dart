@@ -42,6 +42,7 @@ class ActentHomePage extends StatefulWidget {
     this.onRelaySettingsChanged,
     this.lanHost,
     this.lanPort,
+    this.lanPortListenable,
     this.lanCertificateSha256,
     this.lanServerConfig,
     this.pairingDiscovery,
@@ -56,6 +57,7 @@ class ActentHomePage extends StatefulWidget {
     this.router,
     this.queue,
     this.pickWorkInputFile,
+    this.pickImageWorkInputFile,
     this.externalInputService,
     this.incomingContentService,
     this.peerConnectionStatuses,
@@ -79,6 +81,7 @@ class ActentHomePage extends StatefulWidget {
   onRelaySettingsChanged;
   final String? lanHost;
   final int? lanPort;
+  final ValueListenable<int?>? lanPortListenable;
   final String? lanCertificateSha256;
   final ActentLanServerConfig? lanServerConfig;
   final PairingDiscovery? pairingDiscovery;
@@ -94,6 +97,7 @@ class ActentHomePage extends StatefulWidget {
   final ActentRouter? router;
   final WorkQueueCoordinator? queue;
   final Future<ActentMessage?> Function()? pickWorkInputFile;
+  final Future<ActentMessage?> Function()? pickImageWorkInputFile;
   final ExternalInputService? externalInputService;
   final IncomingContentService? incomingContentService;
   final Stream<PeerConnectionStatus>? peerConnectionStatuses;
@@ -121,6 +125,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
   String? _selectedActivityId;
   final Map<String, PeerConnectionStatus> _peerConnectionStatusByDevice = {};
   final Set<String> _connectingDeviceIds = {};
+  int? get _effectiveLanPort =>
+      widget.lanPort ?? widget.lanPortListenable?.value;
+
+  void _onLanPortChanged() {
+    if (mounted) setState(() {});
+  }
+
   String? _pendingWorkName;
   final PairingCoordinator _pairing = PairingCoordinator();
   StreamSubscription<ExternalInputBatch>? _externalInputSubscription;
@@ -176,6 +187,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
   @override
   void initState() {
     super.initState();
+    widget.lanPortListenable?.addListener(_onLanPortChanged);
     _retention = widget.initialAttachmentRetention;
     _packetDedupRetention = widget.initialPacketDedupRetention;
     final externalInputService = widget.externalInputService;
@@ -223,10 +235,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _loadRepositoryData(ActentRepository repository) async {
     final l10n = AppLocalizations.of(context)!;
-    final messages = await repository.listMessages();
+    final messages = (await repository.listMessages())
+        .where((message) => message.metadata['workflowStepId'] == null)
+        .toList(growable: false);
     var works = await repository.listWorks();
-    final workflows = await repository.listWorkflows();
     final localDeviceId = widget.deviceId ?? 'local-device';
+    final workflows = (await repository.listWorkflows())
+        .where((workflow) => workflow.ownerDeviceId == localDeviceId)
+        .toList(growable: false);
     final localNullId = 'null-$localDeviceId';
     var localCatalogChanged = false;
     final existingNull = works
@@ -307,6 +323,13 @@ class _ActentHomePageState extends State<ActentHomePage> {
       statuses[request.message.id] = receipt == null
           ? _ActivityStatus.sending
           : _activityStatusFromReceipt(receipt.status);
+    }
+    for (final message in messages) {
+      if (statuses.containsKey(message.id)) continue;
+      final persistedStatus = message.metadata['activityStatus'];
+      if (persistedStatus is String) {
+        statuses[message.id] = _activityStatusFromName(persistedStatus);
+      }
     }
     messages.sort((left, right) => right.createdAt.compareTo(left.createdAt));
     if (!mounted) return;
@@ -392,8 +415,22 @@ class _ActentHomePageState extends State<ActentHomePage> {
             case 'ios-url' when _isIos:
               queue.register(work.id, IosUrlBinding.fromWork(work).toRunner());
           }
-        } on WorkBindingException {
-          // Invalid work definitions remain visible for correction in Works.
+        } on WorkBindingException catch (error) {
+          // Keep a failure runner registered so durable requests get a
+          // meaningful receipt and the source device sees the real cause.
+          queue.register(
+            work.id,
+            UnavailableWorkRunner(
+              summary: 'Work binding is invalid: ${error.toString()}',
+            ),
+          );
+        } catch (error) {
+          queue.register(
+            work.id,
+            UnavailableWorkRunner(
+              summary: 'Work runner is unavailable: ${error.toString()}',
+            ),
+          );
         }
       }
       await queue.restorePending(works);
@@ -451,6 +488,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   @override
   void dispose() {
+    widget.lanPortListenable?.removeListener(_onLanPortChanged);
     _externalInputSubscription?.cancel();
     _pairingAcceptanceSubscription?.cancel();
     _peerConnectionSubscription?.cancel();
@@ -470,17 +508,28 @@ class _ActentHomePageState extends State<ActentHomePage> {
 
   Future<void> _handleSharedMessage(ActentMessage message) async {
     final repository = widget.repository;
+    if (!mounted) return;
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final target = await _showWorkPicker(message);
+    if (!mounted || target == null) return;
+    final workflow = target.workflow;
+    if (workflow != null) {
+      await _runWorkflowWithMessage(workflow, message);
+      return;
+    }
     if (repository != null) {
       await repository.saveMessage(message);
     }
-    if (!mounted) return;
-    setState(() => _messages.insert(0, message));
-    await WidgetsBinding.instance.endOfFrame;
-    if (!mounted) return;
-    _showWorkPicker(message);
+    if (mounted) setState(() => _messages.insert(0, message));
+    final work = target.work;
+    if (work != null) {
+      await _routeMessageToWork(message, work);
+      return;
+    }
   }
 
-  Future<void> _showWorkPicker(ActentMessage message) async {
+  Future<_SharedContentTarget?> _showWorkPicker(ActentMessage message) async {
     final l10n = AppLocalizations.of(context)!;
     final availableWorks = _works
         .where((work) => work.accepts(message) && _isSelectableWork(work))
@@ -540,14 +589,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         ),
       ),
     );
-    if (target == null || !mounted) return;
-    final work = target.work;
-    if (work != null) {
-      await _routeMessageToWork(message, work);
-      return;
-    }
-    final workflow = target.workflow;
-    if (workflow != null) await _runWorkflowWithMessage(workflow, message);
+    return target;
   }
 
   Future<void> _showMessagePicker(Work work) async {
@@ -566,12 +608,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (inputType == null || !mounted) return;
     if (inputType == ActentContentType.file ||
         inputType == ActentContentType.image) {
-      await _pickFileForWork(work);
-      return;
-    }
-    if (inputType == ActentContentType.json &&
-        widget.pickWorkInputFile != null) {
-      await _pickFileForWork(work);
+      await _pickFileForWork(work, inputType: inputType);
       return;
     }
     final message = await _showManualInputDialog(inputType);
@@ -610,9 +647,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
     );
   }
 
-  Future<void> _pickFileForWork(Work work) async {
+  Future<void> _pickFileForWork(
+    Work work, {
+    ActentContentType? inputType,
+  }) async {
     final l10n = AppLocalizations.of(context)!;
-    final pickWorkInputFile = widget.pickWorkInputFile;
+    final pickWorkInputFile = inputType == ActentContentType.image
+        ? (widget.pickImageWorkInputFile ?? widget.pickWorkInputFile)
+        : widget.pickWorkInputFile;
     if (pickWorkInputFile != null) {
       try {
         final message = await pickWorkInputFile();
@@ -670,17 +712,34 @@ class _ActentHomePageState extends State<ActentHomePage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(_contentTypeLabel(type, l10n)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: type == ActentContentType.json ? 5 : 1,
-          maxLines: type == ActentContentType.json ? 12 : 5,
-          keyboardType: TextInputType.multiline,
-          decoration: InputDecoration(
-            hintText: type == ActentContentType.url
-                ? l10n.urlInputHint
-                : l10n.inputValueHint,
-          ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            final jsonError = type == ActentContentType.json
+                ? _jsonInputError(controller.text)
+                : null;
+            return TextField(
+              controller: controller,
+              autofocus: true,
+              minLines: type == ActentContentType.json ? 8 : 1,
+              maxLines: type == ActentContentType.json ? 20 : 5,
+              keyboardType: TextInputType.multiline,
+              style: type == ActentContentType.json
+                  ? const TextStyle(fontFamily: 'monospace')
+                  : null,
+              onChanged: type == ActentContentType.json
+                  ? (_) => setDialogState(() {})
+                  : null,
+              decoration: InputDecoration(
+                hintText: type == ActentContentType.url
+                    ? l10n.urlInputHint
+                    : type == ActentContentType.json
+                    ? '{\n  "key": "value"\n}'
+                    : l10n.inputValueHint,
+                errorText: jsonError,
+                alignLabelWithHint: true,
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -688,7 +747,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
             child: Text(l10n.cancel),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () {
+              if (controller.text.trim().isEmpty ||
+                  (type == ActentContentType.json &&
+                      _jsonInputError(controller.text) != null)) {
+                return;
+              }
+              Navigator.of(dialogContext).pop(controller.text);
+            },
             child: Text(l10n.continueLabel),
           ),
         ],
@@ -716,6 +782,18 @@ class _ActentHomePageState extends State<ActentHomePage> {
       ),
       content: ActentContent(type: type, data: {key: value.trim()}),
     );
+  }
+
+  String? _jsonInputError(String value) {
+    if (value.trim().isEmpty) return 'JSON cannot be empty.';
+    try {
+      jsonDecode(value);
+      return null;
+    } on FormatException catch (error) {
+      return 'Invalid JSON: ${error.message}';
+    } on Object {
+      return 'Invalid JSON.';
+    }
   }
 
   String _contentTypeLabel(ActentContentType type, AppLocalizations l10n) =>
@@ -1010,10 +1088,12 @@ class _ActentHomePageState extends State<ActentHomePage> {
     if (inputType == null || !mounted) return;
     ActentMessage? message;
     if ((inputType == ActentContentType.file ||
-            inputType == ActentContentType.image ||
-            inputType == ActentContentType.json) &&
+            inputType == ActentContentType.image) &&
         widget.pickWorkInputFile != null) {
-      message = await widget.pickWorkInputFile!();
+      final picker = inputType == ActentContentType.image
+          ? (widget.pickImageWorkInputFile ?? widget.pickWorkInputFile)
+          : widget.pickWorkInputFile;
+      message = await picker!();
     } else if (inputType == ActentContentType.text ||
         inputType == ActentContentType.url ||
         inputType == ActentContentType.json) {
@@ -1032,8 +1112,43 @@ class _ActentHomePageState extends State<ActentHomePage> {
     final repository = widget.repository;
     if (repository == null) return;
     final l10n = AppLocalizations.of(context)!;
+    final activityMessage = ActentMessage(
+      id: message.id,
+      traceId: message.traceId,
+      createdAt: message.createdAt,
+      source: message.source,
+      payload: message.payload,
+      metadata: {
+        ...message.metadata,
+        'activityKind': 'workflow',
+        'workflowId': workflow.id,
+        'activityStatus': _ActivityStatus.processing.name,
+      },
+    );
+    await repository.saveMessage(activityMessage);
+    if (mounted) {
+      setState(() {
+        _messages.removeWhere((item) => item.id == activityMessage.id);
+        _messages.insert(0, activityMessage);
+        _messageStatuses[activityMessage.id] = _ActivityStatus.processing;
+      });
+    }
     try {
-      final execution = await router.runWorkflow(message, workflow);
+      final execution = await router.runWorkflow(activityMessage, workflow);
+      final status = switch (execution.status) {
+        WorkflowExecutionStatus.succeeded => _ActivityStatus.succeeded,
+        WorkflowExecutionStatus.cancelled => _ActivityStatus.cancelled,
+        WorkflowExecutionStatus.failed ||
+        WorkflowExecutionStatus.invalid => _ActivityStatus.failed,
+        WorkflowExecutionStatus.queued ||
+        WorkflowExecutionStatus.running => _ActivityStatus.processing,
+      };
+      await repository.saveMessage(
+        _withActivityStatus(activityMessage, status.name),
+      );
+      if (mounted) {
+        setState(() => _messageStatuses[activityMessage.id] = status);
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1046,6 +1161,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
       );
       await _loadRepositoryData(repository);
     } on Object catch (error) {
+      await repository.saveMessage(
+        _withActivityStatus(activityMessage, _ActivityStatus.failed.name),
+      );
+      if (mounted) {
+        setState(
+          () => _messageStatuses[activityMessage.id] = _ActivityStatus.failed,
+        );
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.workRequestFailed(error.toString()))),
@@ -1053,11 +1176,21 @@ class _ActentHomePageState extends State<ActentHomePage> {
     }
   }
 
+  ActentMessage _withActivityStatus(ActentMessage message, String status) =>
+      ActentMessage(
+        id: message.id,
+        traceId: message.traceId,
+        createdAt: message.createdAt,
+        source: message.source,
+        payload: message.payload,
+        metadata: {...message.metadata, 'activityStatus': status},
+      );
+
   Future<void> _showAddWorkflow({Workflow? existing}) async {
     final repository = widget.repository;
     if (repository == null) return;
     final l10n = AppLocalizations.of(context)!;
-    final candidates = _works.where(_isSelectableWork).toList()
+    final candidates = _works.where((work) => _isLocalWork(work)).toList()
       ..sort((left, right) => left.name.compareTo(right.name));
     final worksById = {for (final work in _works) work.id: work};
     final result = await showDialog<(String, List<WorkflowStep>)>(
@@ -2483,7 +2616,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       controlTopic: widget.relayTopic ?? '',
       blobTopic: widget.relayBlobTopic ?? '',
       lanHost: widget.lanHost,
-      lanPort: widget.lanPort,
+      lanPort: _effectiveLanPort,
       serverCertificateSha256: invite.issuerCertificateSha256,
       certificateSha256: widget.lanCertificateSha256,
     );
@@ -2597,7 +2730,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
       issuerControlTopic: widget.relayTopic ?? '',
       issuerBlobTopic: widget.relayBlobTopic ?? '',
       issuerLanHost: widget.lanHost,
-      issuerLanPort: widget.lanPort,
+      issuerLanPort: _effectiveLanPort,
       issuerPairingLanPort: pairingPort,
       issuerCertificateSha256: widget.lanCertificateSha256,
     );
@@ -2792,7 +2925,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
           controlTopic: widget.relayTopic ?? '',
           blobTopic: widget.relayBlobTopic ?? '',
           lanHost: widget.lanHost,
-          lanPort: widget.lanPort,
+          lanPort: _effectiveLanPort,
           serverCertificateSha256: invite.issuerCertificateSha256,
           certificateSha256: widget.lanCertificateSha256,
         );
@@ -2820,7 +2953,7 @@ class _ActentHomePageState extends State<ActentHomePage> {
         controlTopic: widget.relayTopic ?? '',
         blobTopic: widget.relayBlobTopic ?? '',
         lanHost: widget.lanHost,
-        lanPort: widget.lanPort,
+        lanPort: _effectiveLanPort,
         certificateSha256: widget.lanCertificateSha256,
       );
       await _savePairedDevice(
@@ -3127,9 +3260,14 @@ class _ActentHomePageState extends State<ActentHomePage> {
                 unawaited(_openActivityDetails(message));
               }
             },
-            leading: const Icon(Icons.share_outlined),
+            leading: Icon(
+              _isWorkflowActivity(message)
+                  ? Icons.account_tree_outlined
+                  : Icons.share_outlined,
+            ),
             title: Text(_messagePreview(message)),
             subtitle: Text(
+              '${_activityKindLabel(message, AppLocalizations.of(context)!)} · '
               '${_activityTime(message.createdAt)} · '
               '${_activityStatusLabel(_messageStatuses[message.id], AppLocalizations.of(context)!)}',
             ),
@@ -3228,6 +3366,18 @@ class _ActentHomePageState extends State<ActentHomePage> {
         WorkReceiptStatus.expired => _ActivityStatus.expired,
         WorkReceiptStatus.cancelled => _ActivityStatus.cancelled,
       };
+
+  _ActivityStatus _activityStatusFromName(String value) =>
+      _ActivityStatus.values.firstWhere(
+        (status) => status.name == value,
+        orElse: () => _ActivityStatus.failed,
+      );
+
+  bool _isWorkflowActivity(ActentMessage message) =>
+      message.metadata['activityKind'] == 'workflow';
+
+  String _activityKindLabel(ActentMessage message, AppLocalizations l10n) =>
+      _isWorkflowActivity(message) ? l10n.workflows : l10n.works;
 
   String _activityStatusLabel(_ActivityStatus? status, AppLocalizations l10n) =>
       switch (status ?? _ActivityStatus.sending) {
@@ -3543,6 +3693,8 @@ class _ActivityDetailPage extends StatelessWidget {
           _detailCard('请求 ID', request!.requestId),
           _detailCard('目标设备', request!.targetDeviceId),
         ],
+        if (message.metadata['workflowId'] case final String workflowId)
+          _detailCard('工作流', workflowId),
         if (receipt?.errorCode != null) _detailCard('错误码', receipt!.errorCode!),
         if (summary != null && summary.isNotEmpty)
           _diagnosticCard(context, '错误摘要', summary),

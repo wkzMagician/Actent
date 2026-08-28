@@ -65,6 +65,28 @@ class NullWorkRunner implements WorkRunner {
       const WorkRunResult.stored(summary: 'Message stored by Null Work.');
 }
 
+/// A durable Work may still be visible after its platform binding becomes
+/// invalid or unavailable. Keeping a runner entry for that Work lets the
+/// queue produce a useful, routable receipt instead of the generic restart
+/// diagnostic emitted when no runner is registered at all.
+class UnavailableWorkRunner implements WorkRunner {
+  const UnavailableWorkRunner({this.summary = 'Work runner is unavailable.'});
+
+  final String summary;
+
+  @override
+  String get id => 'unavailable';
+
+  @override
+  Future<WorkRunResult> run(
+    Work work,
+    ActentMessage message, {
+    required String requestId,
+    required CancellationToken cancellation,
+  }) async =>
+      WorkRunResult.failure(errorCode: 'runner_unavailable', summary: summary);
+}
+
 class FakeWorkRunner implements WorkRunner {
   FakeWorkRunner({this.result = const WorkRunResult.success()});
 
@@ -275,7 +297,7 @@ class WorkQueueCoordinator {
             request,
             WorkReceiptStatus.failed,
             errorCode: 'runner_unavailable',
-            summary: 'No runner is registered after restart.',
+            summary: 'Work runner is unavailable after restart; check the Work binding.',
           ),
         );
         continue;
@@ -452,7 +474,11 @@ class WorkQueueCoordinator {
       createdAt: DateTime.now().toUtc(),
       completedAt: DateTime.now().toUtc(),
       errorCode: errorCode,
-      error: error ?? (errorCode == null ? null : WorkError(code: errorCode)),
+      error:
+          error ??
+          (errorCode == null
+              ? null
+              : WorkError(code: errorCode, message: summary)),
       summary: summary,
       diagnostics: diagnostics,
       output: output,
